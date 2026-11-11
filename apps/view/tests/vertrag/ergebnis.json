@@ -1,0 +1,21 @@
+{
+  "gesamt": 2,
+  "treffer": [
+    {
+      "id": 6,
+      "pfad": "/Archiv/Familie/Alben/Album.pdf#seite=1",
+      "relativerPfad": "Alben/Album.pdf [Seite 1/2]",
+      "archivWurzel": "/Archiv/Familie",
+      "ordner": "Alben",
+      "dateiname": "Album.pdf",
+      "endung": ".pdf",
+      "kurztitel": "Albumseite mit Fotos",
+      "aufnahmeDatum": "2008-08-01T00:00:00",
+      "seite": 1,
+      "breite": 4000,
+      "hoehe": 3000,
+      "status": "ok"
+    }
+  ],
+  "dauerMs": 12
+}

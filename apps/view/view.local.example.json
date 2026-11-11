@@ -1,0 +1,9 @@
+{
+  "_hinweis": "Kopie als view.local.json anlegen (nicht im Repo). Wird beim Build gelesen – nach Änderungen neu bauen.",
+  "standardDb": "/Pfad/zur/Sicherung/Bildkatalog.db",
+  "anbieter": [
+    { "pfad": "/Users/kim/Dropbox", "art": "dropbox-klassisch" },
+    { "pfad": "/Users/kim/Library/Mobile Documents", "art": "file-provider" },
+    { "pfad": "/", "art": "lokal" }
+  ]
+}

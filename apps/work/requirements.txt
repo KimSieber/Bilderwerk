@@ -1,0 +1,13 @@
+# Python-Abhaengigkeiten von Work
+# Bei Homebrew-Python (empfohlen) ueber Homebrew installieren:
+#   brew install pillow numpy
+# In einer venv alternativ:  python3 -m pip install -r requirements.txt
+Pillow
+numpy
+
+# Externe Programme (nicht per pip):
+#   python-tk@3.14 – Tk fuer die Oberflaeche:      brew install python-tk@3.14
+#   ExifTool       – Metadaten inkl. HEIC/RAW/GPS: brew install exiftool
+#   poppler        – PDF-Seiten (pdftoppm/pdfinfo): brew install poppler
+#   LM Studio      – lokales Modell fuer die Bildanalyse
+#   sips           – macOS-Bordmittel, Bildumwandlung (HEIC)

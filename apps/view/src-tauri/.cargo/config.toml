@@ -1,0 +1,13 @@
+# Signiert das Programm vor jedem Start (tauri dev, cargo run, cargo test) mit einem
+# festen Zertifikat. So bleibt "Immer erlauben" im Schlüsselbund über alle Builds gültig.
+# Name des Zertifikats: security find-identity -v -p codesigning
+# (gleicher Wert wie bundle.macOS.signingIdentity in tauri.conf.json)
+
+[env]
+PSV_SIGN_IDENTITY = "Apple Development: Kim Jan Sieber (7TTFYF5286)"
+
+[target.aarch64-apple-darwin]
+runner = "scripts/dev-signieren.sh"
+
+[target.x86_64-apple-darwin]
+runner = "scripts/dev-signieren.sh"

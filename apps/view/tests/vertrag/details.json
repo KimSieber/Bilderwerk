@@ -1,0 +1,112 @@
+{
+  "id": 3,
+  "pfad": "/Sicherung/Alt/IMG_0001.jpg",
+  "felder": [
+    {
+      "name": "id",
+      "wert": 3
+    },
+    {
+      "name": "pfad",
+      "wert": "/Sicherung/Alt/IMG_0001.jpg"
+    },
+    {
+      "name": "archiv_wurzel",
+      "wert": "/Sicherung"
+    },
+    {
+      "name": "relativer_pfad",
+      "wert": "Alt/IMG_0001.jpg"
+    },
+    {
+      "name": "ordner",
+      "wert": "Alt"
+    },
+    {
+      "name": "dateiname",
+      "wert": "IMG_0001.jpg"
+    },
+    {
+      "name": "endung",
+      "wert": ".jpg"
+    },
+    {
+      "name": "breite",
+      "wert": 4000
+    },
+    {
+      "name": "hoehe",
+      "wert": 3000
+    },
+    {
+      "name": "aufnahme_datum",
+      "wert": "2015-03-10T10:00:00"
+    },
+    {
+      "name": "kurztitel",
+      "wert": "Strand mit Booten"
+    },
+    {
+      "name": "beschreibung",
+      "wert": "Ein rotes Boot liegt am Strand."
+    },
+    {
+      "name": "schlagworte",
+      "wert": "[\"boot\",\"strand\",\"meer\"]"
+    },
+    {
+      "name": "status",
+      "wert": "duplikat"
+    },
+    {
+      "name": "duplikat_von",
+      "wert": 1
+    },
+    {
+      "name": "hash",
+      "wert": "h1"
+    },
+    {
+      "name": "motiv",
+      "wert": "Landschaft"
+    },
+    {
+      "name": "bildart",
+      "wert": "Foto"
+    },
+    {
+      "name": "farbgebung",
+      "wert": "farbig"
+    },
+    {
+      "name": "ausrichtung",
+      "wert": "quer"
+    },
+    {
+      "name": "jahreszeit",
+      "wert": "Sommer"
+    },
+    {
+      "name": "wetter",
+      "wert": "sonnig"
+    },
+    {
+      "name": "personen_merkmale",
+      "wert": "[]"
+    }
+  ],
+  "begriffe": {
+    "schlagwort": [
+      "boot",
+      "strand",
+      "meer"
+    ]
+  },
+  "duplikate": [
+    {
+      "id": 1,
+      "pfad": "/Archiv/Globetrotter/2015 Thailand/IMG_0001.jpg",
+      "status": "ok"
+    }
+  ]
+}

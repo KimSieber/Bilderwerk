@@ -1,0 +1,34 @@
+[
+  {
+    "feld": "motiv",
+    "titel": "Motiv",
+    "werte": [
+      {
+        "wert": "Menschen in Aktion",
+        "anzahl": 19
+      },
+      {
+        "wert": "Dokument/Text",
+        "anzahl": 2
+      },
+      {
+        "wert": "Landschaft",
+        "anzahl": 2
+      }
+    ]
+  },
+  {
+    "feld": "merkmale",
+    "titel": "Merkmale",
+    "werte": [
+      {
+        "wert": "brille",
+        "anzahl": 2
+      },
+      {
+        "wert": "bart",
+        "anzahl": 1
+      }
+    ]
+  }
+]

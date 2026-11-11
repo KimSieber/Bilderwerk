@@ -1,0 +1,47 @@
+[package]
+name = "bilderwerk-view"
+version = "0.0.7"
+description = "Bilderwerk View – Suche über den KI-Bildkatalog"
+authors = ["Kim Sieber"]
+edition = "2021"
+
+[lib]
+name = "bilderwerk_view_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+doctest = false  # keine Codebeispiele in Doku-Kommentaren
+
+[[bin]]
+name = "bilderwerk-view"
+path = "src/main.rs"
+test = false     # main.rs startet nur die App
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+serde_json = "1"
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.41", features = ["bundled"] }
+# Dropbox-API (v0.0.3): HTTP, PKCE, Schlüsselbund
+ureq = "3"
+sha2 = "0.10"
+base64 = "0.22"
+getrandom = "0.2"
+keyring = { version = "3", features = ["apple-native"] }
+
+# PDF-Seiten über PDFKit (Teil von macOS) statt pdftoppm
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSData", "NSDictionary", "NSValue", "NSGeometry", "NSAutoreleasePool", "NSArray"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphics", "NSSharingService", "NSView", "NSWindow", "NSResponder"] }
+objc2-pdf-kit = { version = "0.3", default-features = false, features = ["std", "PDFDocument", "PDFPage", "objc2-app-kit"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
