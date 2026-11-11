@@ -43,6 +43,7 @@ cache/
 # --- Umgebung / Geheimnisse ---
 # interne/temporäre Unterlagen (Übergaben, Review-Ergebnisse) – nie ins Repo
 apps/view/docs/intern/
+docs/intern/
 # lokale Pfade (DB-Sicherung usw.) – Vorlage: view.local.example.json
 view.local.json
 .env

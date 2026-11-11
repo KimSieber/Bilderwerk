@@ -26,7 +26,7 @@ Einrichtung, Start und Bau stehen im README der jeweiligen Komponente.
 
 ## Lizenz
 
-Bilderwerk steht unter der **[PolyForm Noncommercial License 1.0.0](LICENSE.md)**.
+Bilderwerk steht unter der **[PolyForm Noncommercial License 1.0.0](LICENSE)**.
 Nutzung, Änderung und Weitergabe sind für nicht-kommerzielle Zwecke erlaubt
 (privat, Forschung, gemeinnützige Organisationen, Bildung). Kommerzielle Nutzung ist nicht gestattet.
 
