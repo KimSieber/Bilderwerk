@@ -21,7 +21,7 @@ Eigenschaften:
     - Vorschaubilder (640 px) in Tabelle 'vorschauen' (Schema 4); ältere
       Datenbanken werden automatisch erweitert, nie gelöscht.
     - Duplikate (gleicher SHA-256) übernehmen das KI-Ergebnis des Originals.
-    - Ist LM Studio nicht erreichbar, wartet der Lauf und versucht es erneut.
+    - Ist der KI-Server nicht erreichbar, wartet der Lauf und versucht es erneut.
     - Optionale Sicherungskopie alle N Bilder (Dropbox-sicher, atomar).
 
 Aufruf:
@@ -49,12 +49,13 @@ from typing import NamedTuple
 
 import bildanalyse
 import metadaten
+from bilderwerk.katalog_db import SCHEMA_VERSION, eintraege_entfernen  # noqa: F401
 
-SCHEMA_VERSION = 4        # 4 = Tabelle vorschauen (Vorschaubilder)
 MIN_BYTES = 30_000       # kleinere Dateien (Thumbnails, Icons) ignorieren
-ENDUNGEN = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".tif", ".tiff", ".webp"}
+ENDUNGEN = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".tif", ".tiff", ".webp"} \
+    | bildanalyse.RAW_ENDUNGEN   # RAW (CR2/CR3, NEF, ARW, DNG …) über macOS sips
 PDF_ENDUNG = ".pdf"      # jede PDF-Seite wird ein eigener Eintrag
-WARTEZEIT_SERVER_S = 60  # Wartezeit, wenn LM Studio nicht antwortet
+WARTEZEIT_SERVER_S = 60  # Wartezeit, wenn der KI-Server nicht antwortet
 BACKUP_ALLE = 1000       # Standard: Sicherungskopie nach je N neuen/geaenderten Eintraegen
 ENTFERNEN_MAX_ANTEIL = 0.25  # Schutz: mehr fehlende Dateien gelten als Ablage-Problem
 
@@ -364,45 +365,6 @@ def vorschau_speichern(db, hash_wert: str, vorschau: tuple[bytes, int, int]):
                 datetime.now().isoformat(timespec="seconds")))
 
 
-def eintraege_entfernen(db, ids: list[int]) -> int:
-    """Einträge zu nicht mehr vorhandenen Dateien vollständig entfernen.
-
-    Löscht die Zeilen aus 'bilder', 'begriffe' und 'suche'. War ein gelöschter
-    Eintrag das Original von Duplikaten, wird das erste verbleibende Duplikat
-    zum neuen Original (Status 'ok'), die übrigen zeigen auf dieses – so geht
-    keine KI-Analyse verloren. Vorschauen werden nur gelöscht, wenn kein
-    verbleibender Eintrag denselben Hash nutzt. Kein Commit.
-
-    Parameter:
-        db:  Offene Datenbankverbindung.
-        ids: bilder.id der zu entfernenden Einträge.
-
-    Rückgabe:
-        Anzahl entfernter Einträge.
-    """
-    weg = set(ids)
-    for bild_id in ids:
-        nachfolger = [i for (i,) in db.execute(
-            "SELECT id FROM bilder WHERE duplikat_von = ? ORDER BY id", (bild_id,))
-            if i not in weg]
-        if nachfolger:
-            neu = nachfolger[0]
-            db.execute("UPDATE bilder SET status = 'ok', duplikat_von = NULL WHERE id = ?", (neu,))
-            db.execute("UPDATE bilder SET duplikat_von = ? WHERE duplikat_von = ?", (neu, bild_id))
-    hashes = set()
-    for bild_id in ids:
-        z = db.execute("SELECT hash FROM bilder WHERE id = ?", (bild_id,)).fetchone()
-        if z and z[0]:
-            hashes.add(z[0])
-        db.execute("DELETE FROM begriffe WHERE bild_id = ?", (bild_id,))
-        db.execute("DELETE FROM suche WHERE rowid = ?", (bild_id,))
-        db.execute("DELETE FROM bilder WHERE id = ?", (bild_id,))
-    for h in hashes:
-        if not db.execute("SELECT 1 FROM bilder WHERE hash = ? LIMIT 1", (h,)).fetchone():
-            db.execute("DELETE FROM vorschauen WHERE hash = ?", (h,))
-    return len(ids)
-
-
 # -------------------------------------------------------------------- Dateien
 
 def bilder_finden(wurzel: Path, melden=print,
@@ -551,6 +513,8 @@ class Katalogisierer:
         """
         self.wurzel = wurzel.expanduser().resolve()
         self.db = db_oeffnen(db_pfad.expanduser())
+        # ungueltige Modellantworten neben der Datenbank ablegen
+        bildanalyse.konfigurieren(fehler_ordner=db_pfad.expanduser().parent / "fehler_antworten")
         self.protokoll = Protokoll(protokoll_pfad.expanduser())
         self.backup_pfad = backup_pfad.expanduser() if backup_pfad else None
         if self.backup_pfad and self.backup_pfad.resolve() == db_pfad.expanduser().resolve():
@@ -756,7 +720,7 @@ class Katalogisierer:
         return d
 
     def _analysieren_mit_wiederholung(self, einheit: Einheit) -> dict:
-        """Einheit analysieren und warten, solange LM Studio nicht erreichbar ist.
+        """Einheit analysieren und warten, solange der KI-Server nicht erreichbar ist.
 
         Statt einen Fehler zu buchen, wird alle WARTEZEIT_SERVER_S Sekunden erneut
         versucht; stand['server_wartet'] zeigt den Zustand in der GUI an.
@@ -777,7 +741,7 @@ class Katalogisierer:
                 return ergebnis
             except bildanalyse.ServerNichtErreichbar:
                 self.stand["server_wartet"] = True
-                self.melden(f"LM Studio nicht erreichbar - neuer Versuch in "
+                self.melden(f"KI-Server nicht erreichbar ({bildanalyse.API_URL}) - neuer Versuch in "
                             f"{WARTEZEIT_SERVER_S} s (Server gestartet?)")
                 if self.stopp.wait(WARTEZEIT_SERVER_S):
                     raise KeyboardInterrupt

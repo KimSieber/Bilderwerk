@@ -8,7 +8,7 @@ Ziel:
     Schneller Blick auf das tatsächliche Schema, z. B. zum Abgleich mit
     ../shared/schema.sql.
 
-Aufruf:  python3 db_struktur.py [DATEI]   (Standard: ../Katalog-DB/Bildkatalog.db)
+Aufruf:  python3 db_struktur.py [DATEI]   (Standard: eingestellte Datenbank)
 """
 import sqlite3
 import os
@@ -102,9 +102,13 @@ def analyze_db(db_path):
         print("Verbindung geschlossen.")
 
 if __name__ == "__main__":
-    # Aufruf: python3 db_struktur.py [DATEI]   (Standard: Katalog-DB/Bildkatalog.db)
+    # Aufruf: python3 db_struktur.py [DATEI]   (Standard: eingestellte Datenbank)
     import sys
-    standard = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Katalog-DB", "Bildkatalog.db")
-    db_filename = os.path.expanduser(sys.argv[1]) if len(sys.argv) > 1 else os.path.normpath(standard)
+    if len(sys.argv) > 1:
+        db_filename = os.path.expanduser(sys.argv[1])
+    else:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        import bildanalyse
+        db_filename = str(bildanalyse.STANDARD_DB)
 
     analyze_db(db_filename)

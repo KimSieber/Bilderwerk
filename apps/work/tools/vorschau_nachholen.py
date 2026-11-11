@@ -20,7 +20,7 @@ Eigenschaften:
     - Fortschritt mit Restzeit, Abschlussbericht, Sicherung am Ende.
 
 Aufruf:
-    python3.14 vorschau_nachholen.py [--db DATEI] [--backup DATEI] [--limit N]
+    python3 vorschau_nachholen.py   [--db DATEI] [--backup DATEI] [--limit N]
                                      [--nur-ordner PFAD] [--neu] [--auch-online]
 """
 import argparse

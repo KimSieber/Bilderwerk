@@ -3,7 +3,8 @@
 Zweck:
     Bündelt alles, was zur Analyse EINES Bildes bzw. einer PDF-Seite gehört:
     Bildvorbereitung (Verkleinern/Konvertieren), PDF-Seiten rendern, Bildmaße,
-    Farbmessung aus den Pixeln, Aufruf des lokalen KI-Modells in LM Studio
+    Farbmessung aus den Pixeln, Aufruf des lokalen KI-Modells (OpenAI-
+    kompatibler Server, z. B. LM Studio)
     (inkl. Wiederholung bei ungültigen Antworten) und die Nachbearbeitung der
     Modellantwort.
 
@@ -15,11 +16,20 @@ Genutzt von:
     katalog.py, katalog_gui.py, suche.py, tools/bild_test.py,
     tools/farbe_neu_messen.py
 
-Wichtige Konstanten:
-    API_URL / MODEL     – LM-Studio-Server und Modellname
+Wichtige Werte:
+    API_URL / MODEL / API_SCHLUESSEL – KI-Server, Modellname, optionaler Schlüssel;
+                          kommen aus den gemeinsamen Einstellungen (shared/bilderwerk),
+                          änderbar per konfigurieren()
     PROMPT_VERSION      – bei jeder Prompt-Änderung hochzählen (steht in der DB)
-    KATALOG_ORDNER      – <Programmordner>/Katalog-DB (Standard-DB, Fehlerablage)
+    STANDARD_DB         – eingestellte Datenbank bzw. Standardvorschlag
+    FEHLER_ORDNER       – Ablage ungültiger Antworten (neben der Datenbank)
     SCHEMA / PROMPT     – JSON-Schema und Anweisung an das Modell
+
+KI-Server:
+    Jeder OpenAI-kompatible Server mit Bildeingabe (LM Studio, Ollama,
+    llama.cpp-Server …). Lehnt der Server einzelne Angaben der Anfrage ab
+    (HTTP 400), wird stufenweise mit einer einfacheren Anfrage wiederholt
+    (siehe KOMPAT_STUFEN); die funktionierende Stufe gilt für den weiteren Lauf.
 
 Externe Programme:
     sips (macOS), pdftoppm/pdfinfo (Homebrew-Paket poppler);
@@ -33,24 +43,35 @@ import subprocess
 import tempfile
 import time
 import urllib.error
+import sys
 import urllib.request
 from pathlib import Path
 
-API_URL = "http://127.0.0.1:1234/v1/chat/completions"
-MODEL = "qwen/qwen3.5-9b"
+# Gemeinsamer Code (Einstellungen) liegt in <Repo>/shared
+_SHARED = Path(__file__).resolve().parent.parent.parent / "shared"
+if _SHARED.is_dir() and str(_SHARED) not in sys.path:
+    sys.path.insert(0, str(_SHARED))
+from bilderwerk import einstellungen  # noqa: E402
+from bilderwerk.bild import MAX_KANTE_SEITE, PDFINFO, PDFTOPPM, RAW_ENDUNGEN  # noqa: E402,F401
+
+# Bis v0.1 lagen Einstellungen neben den Programmen – Quelle für die Migration
+ALT_EINSTELLUNGEN = Path(__file__).resolve().parent / "gui_einstellungen.json"
+_E = einstellungen.laden(ALT_EINSTELLUNGEN)
+
+API_URL = _E["work"]["ki"]["url"]
+MODEL = _E["work"]["ki"]["modell"]
+API_SCHLUESSEL = _E["work"]["ki"]["schluessel"]
 PROMPT_VERSION = 4        # bei Prompt-Aenderungen hochzaehlen
 MAX_KANTE = 1024          # Pixel, laengste Seite fuers Modell
-MAX_KANTE_SEITE = 1280    # PDF-Seiten (oft mehrere Fotos) etwas groesser
-PDFTOPPM = shutil.which("pdftoppm")   # aus Homebrew-Paket "poppler"
-PDFINFO = shutil.which("pdfinfo")
 KONTEXT_ORDNER = 3        # so viele uebergeordnete Ordner als Hinweis mitgeben
 TIMEOUT_S = 900
 MAX_TOKENS = 3000
 VERSUCHE = 3              # Wiederholungen bei abgeschnittener / ungueltiger Antwort
-# Datenbank-Ordner neben den Programmen: <Programmordner>/Katalog-DB
-KATALOG_ORDNER = Path(__file__).resolve().parent / "Katalog-DB"
-STANDARD_DB = KATALOG_ORDNER / "Bildkatalog.db"
-FEHLER_ORDNER = KATALOG_ORDNER / "fehler_antworten"
+TIMEOUT_TEST_S = 8        # Verbindungstest (Modellliste)
+# Eingestellte Datenbank bzw. Vorschlag im Einstellungsordner
+STANDARD_DB = einstellungen.db_pfad(_E)
+# Ungueltige Modellantworten landen neben der Datenbank (Katalogisierer setzt den Ordner)
+FEHLER_ORDNER = STANDARD_DB.parent / "fehler_antworten"
 
 U = "unklar"
 MOTIVE = [
@@ -214,96 +235,9 @@ def bild_vorbereiten(pfad: Path, tmpdir: str, max_kante: int = MAX_KANTE) -> Pat
 
 # ------------------------------------------------------------------ PDF-Seiten
 
-SEITEN_MARKE = "#seite="
-
-
-def eintrag_schluessel(datei: Path, seite: int | None) -> str:
-    """Eindeutigen Datenbank-Schlüssel (Spalte 'pfad') bilden.
-
-    Bilddateien werden über ihren absoluten Pfad identifiziert, PDF-Seiten über
-    '<Pfad>#seite=<n>'.
-
-    Parameter:
-        datei: Absoluter Pfad der Datei.
-        seite: Seitennummer bei PDFs, sonst None.
-
-    Rückgabe:
-        Schlüssel als Text, z. B. '/…/Album.pdf#seite=3'.
-    """
-    return str(datei) if seite is None else f"{datei}{SEITEN_MARKE}{seite}"
-
-
-def quelle_aufloesen(schluessel: str) -> tuple[Path, int | None]:
-    """Datenbank-Schlüssel in Datei und Seite zerlegen.
-
-    Gegenstück zu eintrag_schluessel().
-
-    Parameter:
-        schluessel: Wert aus der Spalte 'pfad'.
-
-    Rückgabe:
-        Tupel (Dateipfad, Seitennummer oder None).
-    """
-    if SEITEN_MARKE in schluessel:
-        datei, seite = schluessel.rsplit(SEITEN_MARKE, 1)
-        return Path(datei), int(seite)
-    return Path(schluessel), None
-
-
-def pdf_seitenzahl(pdf: Path) -> int:
-    """Seitenzahl einer PDF-Datei ermitteln.
-
-    Liest die Zeile 'Pages:' aus der Ausgabe von pdfinfo (poppler).
-
-    Parameter:
-        pdf: Pfad der PDF-Datei.
-
-    Rückgabe:
-        Anzahl der Seiten.
-
-    Fehler:
-        RuntimeError, wenn pdfinfo fehlt oder die Seitenzahl nicht lesbar ist
-        (PDF beschädigt oder verschlüsselt).
-    """
-    if not PDFINFO:
-        raise RuntimeError("pdfinfo fehlt (brew install poppler)")
-    out = subprocess.run([PDFINFO, str(pdf)], capture_output=True, text=True,
-                         timeout=120).stdout
-    for zeile in out.splitlines():
-        if zeile.startswith("Pages:"):
-            return int(zeile.split(":", 1)[1])
-    raise RuntimeError("Seitenzahl nicht lesbar (PDF beschädigt oder verschlüsselt?)")
-
-
-def pdf_seite_rendern(pdf: Path, seite: int, tmpdir: str, max_kante: int,
-                      format_: str = "jpeg") -> Path:
-    """Eine einzelne PDF-Seite als Bild rendern.
-
-    Nutzt pdftoppm (poppler); die längste Kante wird auf max_kante skaliert.
-
-    Parameter:
-        pdf:       Pfad der PDF-Datei.
-        seite:     Seitennummer (ab 1).
-        tmpdir:    Temporärer Ordner für die Zieldatei.
-        max_kante: Längste Kante in Pixel.
-        format_:   'jpeg' (Standard) oder z. B. 'png' (Vorschau in der GUI).
-
-    Rückgabe:
-        Pfad der erzeugten Bilddatei.
-
-    Fehler:
-        RuntimeError, wenn pdftoppm fehlt oder die Seite nicht renderbar ist.
-    """
-    if not PDFTOPPM:
-        raise RuntimeError("pdftoppm fehlt (brew install poppler)")
-    ziel = Path(tmpdir) / f"seite_{seite}"
-    r = subprocess.run([PDFTOPPM, "-f", str(seite), "-l", str(seite), "-scale-to",
-                        str(max_kante), f"-{format_}", "-singlefile", str(pdf), str(ziel)],
-                       capture_output=True, text=True, timeout=300)
-    datei = ziel.with_suffix(".jpg" if format_ == "jpeg" else f".{format_}")
-    if not datei.exists():
-        raise RuntimeError(f"PDF-Seite {seite} nicht renderbar: {r.stderr.strip()[:150]}")
-    return datei
+# Schluessel und PDF-Seiten: gemeinsamer Code in shared/bilderwerk
+from bilderwerk.katalog_db import SEITEN_MARKE, eintrag_schluessel, quelle_aufloesen  # noqa: E402,F401
+from bilderwerk.bild import pdf_seitenzahl, pdf_seite_rendern  # noqa: E402,F401
 
 
 def anzeigebild(schluessel: str, tmpdir: str, max_kante: int) -> Path:
@@ -327,108 +261,9 @@ def anzeigebild(schluessel: str, tmpdir: str, max_kante: int) -> Path:
 
 # ------------------------------------------------------------------ Vorschauen
 
-VORSCHAU_KANTE = 640      # laengste Kante der Vorschau in Pixel (nie vergroessern)
-VORSCHAU_QUALITAET = 80   # JPEG-Qualitaet
-VORSCHAU_VERSION = 1      # Verfahrensversion; hochzaehlen erlaubt gezieltes Neuerzeugen
-_SF_DATALESS = 0x40000000  # macOS: Datei liegt nur in der Cloud (Dropbox "nur online")
-
-
-def nur_online(pfad: Path) -> bool:
-    """Prüfen, ob eine Datei nur als Cloud-Platzhalter vorliegt (Dropbox „nur online“).
-
-    Erkennung ohne Herunterladen: macOS-Flag SF_DATALESS, ersatzweise
-    Datei mit Größe > 0, aber ohne belegte Blöcke, oder Größe 0.
-
-    Parameter:
-        pfad: Zu prüfende Datei.
-
-    Rückgabe:
-        True, wenn der Inhalt nicht lokal vorliegt; False sonst (auch bei Fehlern).
-    """
-    try:
-        st = pfad.stat()
-    except OSError:
-        return False
-    if getattr(st, "st_flags", 0) & _SF_DATALESS:
-        return True
-    return st.st_size == 0 or (getattr(st, "st_blocks", 1) == 0 and st.st_size > 0)
-
-
-def _bild_oeffnen_fuer_vorschau(pfad: Path, tmpdir: str):
-    """Bild mit Pillow öffnen – notfalls über eine sips-Kopie (z. B. HEIC ohne pillow-heif).
-
-    Parameter:
-        pfad:   Bilddatei.
-        tmpdir: Temporärer Ordner für die sips-Kopie.
-
-    Rückgabe:
-        Geöffnetes PIL.Image (vom Aufrufer zu schließen).
-
-    Fehler:
-        Pillow-/sips-Fehler, wenn das Bild auf keinem Weg lesbar ist.
-    """
-    from PIL import Image
-    try:
-        import pillow_heif                     # optional: HEIC direkt mit Pillow
-        pillow_heif.register_heif_opener()
-    except ImportError:
-        pass
-    try:
-        return Image.open(pfad)
-    except Exception:
-        if not shutil.which("sips"):
-            raise
-        # sips kann HEIC/HEIF; JPEG behaelt die EXIF-Drehangabe fuer exif_transpose
-        ziel = Path(tmpdir) / "vorschau_quelle.jpg"
-        subprocess.run(["sips", "-Z", str(VORSCHAU_KANTE * 2), "-s", "format", "jpeg",
-                        "-s", "formatOptions", "95", str(pfad), "--out", str(ziel)],
-                       check=True, capture_output=True, timeout=120)
-        return Image.open(ziel)
-
-
-def vorschau_erzeugen(pfad: Path, seite: int | None = None) -> tuple[bytes, int, int]:
-    """Vorschaubild (JPEG, längste Kante ≤ 640 px) zu einem Bild bzw. einer PDF-Seite erzeugen.
-
-    Vorgaben laut Auftrag „Vorschaubilder in der Datenbank“: Quelle ist das
-    Original bzw. die gerenderte PDF-Seite (1280 px); EXIF-Drehung anwenden;
-    nach RGB wandeln, Transparenz auf Weiß; LANCZOS; nie vergrößern; JPEG
-    Qualität 80, optimiert, nicht progressiv, ohne Metadaten.
-
-    Parameter:
-        pfad:  Bild- oder PDF-Datei.
-        seite: Seitennummer bei PDFs, sonst None.
-
-    Rückgabe:
-        Tupel (JPEG-Bytes, Breite, Höhe) der Vorschau.
-
-    Fehler:
-        Jeder Lese-/Renderfehler wird weitergereicht – der Aufrufer entscheidet
-        (im Katalog-Lauf: protokollieren, Eintrag trotzdem speichern).
-    """
-    import io
-    from PIL import Image, ImageOps
-    with tempfile.TemporaryDirectory() as tmp:
-        quelle = (pdf_seite_rendern(pfad, seite, tmp, MAX_KANTE_SEITE) if seite is not None
-                  else pfad)
-        img = _bild_oeffnen_fuer_vorschau(quelle, tmp)
-        try:
-            if img.format == "JPEG":
-                img.draft("RGB", (VORSCHAU_KANTE * 2, VORSCHAU_KANTE * 2))  # schneller laden
-            img = ImageOps.exif_transpose(img)
-            if img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info):
-                img = img.convert("RGBA")
-                weiss = Image.new("RGB", img.size, (255, 255, 255))
-                weiss.paste(img, mask=img.getchannel("A"))
-                img = weiss
-            elif img.mode != "RGB":
-                img = img.convert("RGB")
-            img.thumbnail((VORSCHAU_KANTE, VORSCHAU_KANTE), Image.LANCZOS)  # vergroessert nie
-            puffer = io.BytesIO()
-            img.save(puffer, "JPEG", quality=VORSCHAU_QUALITAET, optimize=True,
-                     progressive=False)
-            return puffer.getvalue(), img.width, img.height
-        finally:
-            img.close()
+# Vorschaubilder: gemeinsamer Code in shared/bilderwerk
+from bilderwerk.bild import (VORSCHAU_KANTE, VORSCHAU_QUALITAET, VORSCHAU_VERSION,  # noqa: E402,F401
+                             nur_online, vorschau_erzeugen)
 
 
 def bildmasse(pfad: Path) -> dict:
@@ -546,8 +381,131 @@ def kontext_text(pfad: Path, seite: int | None = None, seiten: int | None = None
 
 # ------------------------------------------------------------------ Modell
 
+def konfigurieren(url: str | None = None, modell: str | None = None,
+                  schluessel: str | None = None, fehler_ordner: Path | None = None):
+    """KI-Server, Modell, Schlüssel bzw. Fehlerablage zur Laufzeit setzen.
+
+    Nur übergebene Werte werden geändert. Gilt ab dem nächsten Bild.
+
+    Parameter:
+        url:           Adresse des Servers (Basis …/v1 oder …/chat/completions).
+        modell:        Modellname, wie ihn der Server kennt.
+        schluessel:    API-Schlüssel (leer = keiner).
+        fehler_ordner: Ordner für ungültige Antworten.
+    """
+    global API_URL, MODEL, API_SCHLUESSEL, FEHLER_ORDNER, _kompat_stufe
+    if url is not None and url.strip() != API_URL:
+        API_URL = url.strip()
+        _kompat_stufe = 0                     # neuer Server: wieder mit voller Anfrage
+    if modell is not None and modell.strip() != MODEL:
+        MODEL = modell.strip()
+        _kompat_stufe = 0
+    if schluessel is not None:
+        API_SCHLUESSEL = schluessel.strip()
+    if fehler_ordner is not None:
+        FEHLER_ORDNER = Path(fehler_ordner)
+
+
+def endpunkte(url: str) -> tuple[str, str]:
+    """Adressen für Chat-Anfrage und Modellliste aus der eingestellten URL bilden.
+
+    Akzeptiert die Basisadresse ('http://host:1234/v1'), die volle Adresse
+    ('…/v1/chat/completions') oder nur 'http://host:port' (dann wird '/v1' ergänzt).
+
+    Parameter:
+        url: Eingestellte Adresse.
+
+    Rückgabe:
+        Tupel (Chat-URL, Modell-URL).
+    """
+    u = (url or "").strip().rstrip("/")
+    if u.endswith("/chat/completions"):
+        basis = u[: -len("/chat/completions")]
+    elif u.endswith("/models"):
+        basis = u[: -len("/models")]
+    else:
+        basis = u
+        pfad = basis.split("://", 1)[-1].partition("/")[2]
+        if not pfad:                          # nur Host:Port angegeben
+            basis += "/v1"
+    return basis + "/chat/completions", basis + "/models"
+
+
+def _kopfzeilen(schluessel: str | None = None) -> dict:
+    """HTTP-Kopfzeilen inkl. optionalem API-Schlüssel.
+
+    Parameter:
+        schluessel: Schlüssel; Standard: eingestellter API_SCHLUESSEL.
+
+    Rückgabe:
+        Dictionary der Kopfzeilen.
+    """
+    k = {"Content-Type": "application/json"}
+    s = API_SCHLUESSEL if schluessel is None else schluessel
+    if s:
+        k["Authorization"] = f"Bearer {s}"
+    return k
+
+
+def _http_fehlertext(ex: urllib.error.HTTPError) -> str:
+    """Kurze, lesbare Fehlermeldung aus einer HTTP-Fehlerantwort.
+
+    Parameter:
+        ex: HTTPError des Servers.
+
+    Rückgabe:
+        z. B. 'HTTP 400: model not found'.
+    """
+    try:
+        rumpf = ex.read().decode("utf-8", "replace")
+        try:
+            d = json.loads(rumpf)
+            fehler = d.get("error", d)
+            rumpf = fehler.get("message", rumpf) if isinstance(fehler, dict) else str(fehler)
+        except ValueError:
+            pass
+    except Exception:
+        rumpf = ""
+    return f"HTTP {ex.code}: {rumpf.strip()[:300] or ex.reason}"
+
+
+def modelle_abfragen(url: str | None = None, schluessel: str | None = None) -> list[str]:
+    """Verbindung testen und die Modelle des Servers abfragen (GET …/models).
+
+    Parameter:
+        url:        Adresse; Standard: eingestellte API_URL.
+        schluessel: API-Schlüssel; Standard: eingestellter.
+
+    Rückgabe:
+        Sortierte Liste der Modellnamen (kann leer sein).
+
+    Fehler:
+        ServerNichtErreichbar, wenn keine Verbindung zustande kommt;
+        RuntimeError mit lesbarer Meldung bei HTTP-Fehlern oder unbekannter Antwort.
+    """
+    _, modell_url = endpunkte(url or API_URL)
+    req = urllib.request.Request(modell_url, headers=_kopfzeilen(schluessel))
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_TEST_S) as r:
+            d = json.load(r)
+    except urllib.error.HTTPError as ex:
+        raise RuntimeError(_http_fehlertext(ex)) from ex
+    except (urllib.error.URLError, OSError) as ex:
+        raise ServerNichtErreichbar(str(getattr(ex, "reason", ex))) from ex
+    except ValueError as ex:
+        raise RuntimeError("Antwort ist kein JSON – ist das ein OpenAI-kompatibler Server?") from ex
+    eintraege = d.get("data") if isinstance(d, dict) else None
+    if eintraege is None and isinstance(d, dict):
+        eintraege = d.get("models")             # einige Server (z. B. Ollama nativ)
+    if not isinstance(eintraege, list):
+        raise RuntimeError("Unbekanntes Antwortformat der Modellliste")
+    namen = {str(m.get("id") or m.get("name") or m.get("model") or "") if isinstance(m, dict)
+             else str(m) for m in eintraege}
+    return sorted(n for n in namen if n)
+
+
 class ServerNichtErreichbar(Exception):
-    """LM Studio antwortet nicht (Server gestoppt, App beendet, Neustart …).
+    """KI-Server antwortet nicht (Server gestoppt, App beendet, Neustart …).
 
     Wird von katalog.py abgefangen: Der Lauf wartet und versucht es erneut,
     statt einen Fehler zu buchen.
@@ -562,13 +520,62 @@ class AntwortUngueltig(ValueError):
     """
 
 
+# Kompatibilitaetsstufen: 0 = volle Anfrage (LM Studio), 1 = nur Standardparameter
+# mit JSON-Schema, 2 = nur 'JSON-Objekt' verlangt, 3 = ohne Formatvorgabe.
+KOMPAT_STUFEN = 4
+_kompat_stufe = 0
+
+
+def _payload(prompt: str, b64: str, versuch: int, stufe: int) -> dict:
+    """Anfrage für eine Kompatibilitätsstufe zusammenstellen.
+
+    Parameter:
+        prompt:  Fertig formatierter Prompt-Text.
+        b64:     Bild als Base64-kodiertes JPEG.
+        versuch: Nummer des Versuchs (1 = erster).
+        stufe:   0 … KOMPAT_STUFEN-1 (siehe oben).
+
+    Rückgabe:
+        Anfrage als Dictionary.
+    """
+    payload = {
+        "model": MODEL,
+        # Ab dem 2. Versuch etwas mehr Variation und Strafe fuer Wiederholungen,
+        # damit sich das Modell nicht erneut in einer Endlosschleife verfaengt.
+        "temperature": 0.2 if versuch == 1 else 0.5,
+        "max_tokens": MAX_TOKENS,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+            ],
+        }],
+    }
+    if stufe <= 1:
+        payload["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": "bildanalyse", "strict": True, "schema": SCHEMA},
+        }
+    elif stufe == 2:
+        payload["response_format"] = {"type": "json_object"}
+    if stufe == 0:
+        payload["chat_template_kwargs"] = {"enable_thinking": False}
+        if versuch > 1:
+            payload["repeat_penalty"] = 1.15
+    if versuch > 1:
+        payload["frequency_penalty"] = 0.4
+    return payload
+
+
 def _anfrage(prompt: str, b64: str, versuch: int) -> dict:
-    """Eine einzelne Anfrage an das Modell in LM Studio senden.
+    """Eine einzelne Anfrage an das Modell senden.
 
     Baut die OpenAI-kompatible Anfrage mit Prompt, Bild (Base64) und festem
     JSON-Schema. Ab dem 2. Versuch wird mit höherer Temperatur und Strafe für
     Wiederholungen gearbeitet, damit sich das Modell nicht erneut in einer
-    Endlosschleife verfängt.
+    Endlosschleife verfängt. Lehnt der Server die Anfrage ab (HTTP 400/422),
+    wird mit der nächsten, einfacheren Kompatibilitätsstufe wiederholt.
 
     Parameter:
         prompt:  Fertig formatierter Prompt-Text.
@@ -580,48 +587,39 @@ def _anfrage(prompt: str, b64: str, versuch: int) -> dict:
 
     Fehler:
         ServerNichtErreichbar, wenn die Verbindung abgelehnt wird;
+        RuntimeError mit Servermeldung, wenn auch die einfachste Stufe abgelehnt
+        wird (z. B. Modell unbekannt) oder der Schlüssel fehlt/falsch ist;
         andere urllib-Fehler (z. B. Timeout) werden weitergereicht.
     """
-    payload = {
-        "model": MODEL,
-        # Ab dem 2. Versuch etwas mehr Variation und Strafe fuer Wiederholungen,
-        # damit sich das Modell nicht erneut in einer Endlosschleife verfaengt.
-        "temperature": 0.2 if versuch == 1 else 0.5,
-        "max_tokens": MAX_TOKENS,
-        "chat_template_kwargs": {"enable_thinking": False},
-        "messages": [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-            ],
-        }],
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {"name": "bildanalyse", "strict": True, "schema": SCHEMA},
-        },
-    }
-    if versuch > 1:
-        payload["repeat_penalty"] = 1.15
-        payload["frequency_penalty"] = 0.4
-    req = urllib.request.Request(
-        API_URL, data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
-            return json.load(r)
-    except urllib.error.URLError as ex:
-        grund = getattr(ex, "reason", ex)
-        if isinstance(grund, ConnectionRefusedError) or "refused" in str(grund).lower():
-            raise ServerNichtErreichbar(str(grund)) from ex
-        raise
+    global _kompat_stufe
+    if not MODEL:
+        raise RuntimeError("Kein KI-Modell eingestellt (Work → KI-Server …)")
+    chat_url, _ = endpunkte(API_URL)
+    while True:
+        req = urllib.request.Request(
+            chat_url, data=json.dumps(_payload(prompt, b64, versuch, _kompat_stufe)).encode(),
+            headers=_kopfzeilen())
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as ex:
+            if ex.code in (400, 422) and _kompat_stufe < KOMPAT_STUFEN - 1:
+                _kompat_stufe += 1
+                continue
+            if ex.code in (400, 422):
+                _kompat_stufe = 0          # lag nicht am Format – beim nächsten Mal wieder voll
+            raise RuntimeError(_http_fehlertext(ex)) from ex
+        except urllib.error.URLError as ex:
+            grund = getattr(ex, "reason", ex)
+            if isinstance(grund, ConnectionRefusedError) or "refused" in str(grund).lower():
+                raise ServerNichtErreichbar(str(grund)) from ex
+            raise
 
 
 def _rohantwort_sichern(pfad: Path, versuch: int, antwort: dict):
     """Fehlerhafte Modellantwort zur späteren Analyse speichern.
 
-    Schreibt die Rohantwort als JSON nach Katalog-DB/fehler_antworten/
+    Schreibt die Rohantwort als JSON nach FEHLER_ORDNER (neben der Datenbank)
     (<Dateiname>_versuch<n>.json). Fehler beim Speichern werden ignoriert.
 
     Parameter:
@@ -755,9 +753,48 @@ def liste_bereinigen(werte, entferne=frozenset()) -> list[str]:
     return ergebnis
 
 
+def felder_ergaenzen(e: dict) -> dict:
+    """Antwort an das SCHEMA anpassen – für Modelle, die es nicht streng einhalten.
+
+    - fehlende Felder: leerer Text, leere Liste, 'unklar' bzw. None
+    - Listen als Text ('a, b') werden zu Listen, Texte als Liste zu Text
+    - Werte mit fester Auswahl (enum): Groß-/Kleinschreibung angleichen,
+      Unbekanntes → 'unklar'
+    - Personenanzahl als Text ('2') → Zahl
+
+    Parameter:
+        e: Ergebnis-Dictionary des Modells (wird direkt verändert).
+
+    Rückgabe:
+        Dasselbe Dictionary.
+    """
+    for feld, art in SCHEMA["properties"].items():
+        wert = e.get(feld)
+        if art["type"] == "array":
+            if isinstance(wert, str):
+                wert = [w.strip() for w in re.split(r"[,;\n]", wert) if w.strip()]
+            elif not isinstance(wert, list):
+                wert = []
+            e[feld] = wert
+        elif art["type"] == "integer":
+            if isinstance(wert, str) and wert.strip().isdigit():
+                wert = int(wert.strip())
+            e[feld] = wert if isinstance(wert, int) and not isinstance(wert, bool) else None
+        else:
+            if isinstance(wert, list):
+                wert = ", ".join(str(w) for w in wert)
+            wert = "" if wert is None else str(wert).strip()
+            if "enum" in art:
+                treffer = {w.lower(): w for w in art["enum"]}
+                wert = treffer.get(wert.lower(), U)
+            e[feld] = wert
+    return e
+
+
 def nachbearbeiten(e: dict) -> dict:
     """Modellantwort plausibilisieren und vereinheitlichen.
 
+    - Felder an das SCHEMA anpassen (felder_ergaenzen)
     - Motiv auf die feste Liste abbilden (Original bleibt in 'motiv_roh')
     - Wetter: innen → 'entfällt'; 'entfällt' bei außen → 'unklar'
     - Schlagworte ohne Füllwörter und ohne Wiederholung der Kategorien
@@ -769,6 +806,7 @@ def nachbearbeiten(e: dict) -> dict:
     Rückgabe:
         Dasselbe, bereinigte Dictionary.
     """
+    felder_ergaenzen(e)
     e["motiv_roh"] = e.get("motiv", "")
     e["motiv"] = motiv_zuordnen(e["motiv_roh"])
     if e.get("innen_aussen") == "innen":

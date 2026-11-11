@@ -13,18 +13,20 @@ Ziel:
     Fortschritt ist jederzeit gespeichert.
 
 Aufruf:
-    python3.14 katalog_gui.py   (oder Doppelklick auf „Bilderwerk Work starten.command“)
+    python3 katalog_gui.py   (oder Doppelklick auf „Bilderwerk Work starten.command“)
 
 Einstellungen:
-    gui_einstellungen.json neben den Programmen (nicht im Repo; Vorlage:
-    gui_einstellungen.example.json). Wird beim Start geladen und bei jeder
-    Änderung bzw. beim Start eines Laufs gespeichert.
+    Gemeinsame Datei von Work und Sweep im Benutzerordner
+    (~/Library/Application Support/Bilderwerk/einstellungen.json, siehe
+    shared/bilderwerk/einstellungen.py): Datenbank, Abschnitt 'work' mit
+    Bildordner, Sicherung, Optionen und KI-Server. Wird beim Start geladen und
+    bei jeder Änderung bzw. beim Start eines Laufs gespeichert. Beim ersten
+    Start werden die Werte der alten gui_einstellungen.json übernommen.
 
 Threads:
     Der Lauf läuft in einem eigenen Thread; Meldungen kommen über eine Queue,
     die Anzeige wird jede Sekunde im Tk-Hauptthread aktualisiert.
 """
-import json
 import os
 import queue
 import shutil
@@ -44,8 +46,9 @@ import katalog
 import metadaten
 
 import bildanalyse
-# Einstellungen liegen direkt neben den Programmen
-EINSTELLUNGEN = Path(__file__).resolve().parent / "gui_einstellungen.json"
+from bilderwerk import einstellungen   # Pfad richtet bildanalyse ein (shared/)
+from ki_dialog import KiDialog
+
 VORSCHAU_PX = 320
 
 
@@ -131,6 +134,8 @@ class KatalogGUI:
         self.var_backup = tk.StringVar()
         self.var_backup_alle = tk.IntVar(value=katalog.BACKUP_ALLE)
         self.var_wach = tk.BooleanVar(value=True)
+        self.ki = {"url": bildanalyse.API_URL, "modell": bildanalyse.MODEL,
+                   "schluessel": bildanalyse.API_SCHLUESSEL}
 
         zeilen = [("Bildordner:", self.var_ordner, [("Wählen …", self._ordner_waehlen)]),
                   ("Datenbank:", self.var_db, [("Vorhandene öffnen …", self._db_oeffnen),
@@ -147,6 +152,12 @@ class KatalogGUI:
         # Statuszeile unter der Datenbank: zeigt, was in der gewaehlten Datei steckt
         self.lbl_db_info = ttk.Label(rahmen, text="")
         self.lbl_db_info.grid(row=3, column=1, columnspan=2, sticky="w", padx=6)
+        # KI-Server: Anzeige plus Dialog
+        ttk.Label(rahmen, text="KI-Server:").grid(row=5, column=0, sticky="w", **pad)
+        self.lbl_ki = ttk.Label(rahmen, text="")
+        self.lbl_ki.grid(row=5, column=1, sticky="w", **pad)
+        self.btn_ki = ttk.Button(rahmen, text="Einstellen …", command=self._ki_einstellen)
+        self.btn_ki.grid(row=5, column=2, sticky="w", padx=8, pady=3)
         rahmen.columnconfigure(1, weight=1)
         self.var_db.trace_add("write", lambda *_: self._db_info_zeigen())
         # Sicherungsintervall auch waehrend eines Laufs aenderbar
@@ -163,7 +174,8 @@ class KatalogGUI:
         if not metadaten.EXIFTOOL:
             ttk.Label(optionen, text="  ⚠ ExifTool fehlt (brew install exiftool)",
                       foreground="#b35c00").pack(side="left")
-        ttk.Label(rahmen, text=f"Einstellungen: {EINSTELLUNGEN}   |   Python: {sys.executable}",
+        ttk.Label(rahmen, text=f"Einstellungen: {einstellungen.datei()}   |   "
+                               f"Python: {sys.executable}",
                   foreground="#777777").grid(row=7, column=0, columnspan=3, sticky="w", **pad)
 
         # --- Steuerung ---
@@ -335,7 +347,7 @@ class KatalogGUI:
         """Sinnvollen Startordner für Dateidialoge bestimmen.
 
         Geht vom eingetragenen Pfad so lange nach oben, bis ein vorhandener Ordner
-        gefunden ist; ohne Eintrag der Standardordner Katalog-DB.
+        gefunden ist; ohne Eintrag der Ordner der Standard-Datenbank.
 
         Parameter:
             wert: Eingetragener Pfad (kann leer sein).
@@ -343,7 +355,7 @@ class KatalogGUI:
         Rückgabe:
             Pfad eines vorhandenen Ordners als Text.
         """
-        p = Path(wert).expanduser() if wert else bildanalyse.KATALOG_ORDNER
+        p = Path(wert).expanduser() if wert else bildanalyse.STANDARD_DB.parent
         while not p.is_dir() and p != p.parent:
             p = p.parent
         return str(p)
@@ -432,34 +444,72 @@ class KatalogGUI:
 
     # ------------------------------------------------------ Einstellungen
     def _einstellungen_laden(self):
-        """Gespeicherte Einstellungen aus gui_einstellungen.json übernehmen.
+        """Gespeicherte Einstellungen aus der gemeinsamen Einstellungsdatei übernehmen.
 
-        Fehlt die Datei oder ist sie defekt, bleiben die Standardwerte.
+        Fehlt die Datei, gelten die Standardwerte (bzw. die migrierten Werte der
+        alten gui_einstellungen.json).
 
         Rückgabe:
             Keine.
         """
-        try:
-            e = json.loads(EINSTELLUNGEN.read_text())
-        except Exception:
-            return
-        self.var_ordner.set(e.get("ordner", ""))
-        self.var_db.set(e.get("db", self.var_db.get()))
-        self.var_backup.set(e.get("backup", ""))
-        self.var_backup_alle.set(e.get("backup_alle", katalog.BACKUP_ALLE))
-        self.var_wach.set(e.get("wach", True))
+        e = einstellungen.laden(bildanalyse.ALT_EINSTELLUNGEN)
+        w = e["work"]
+        self.var_ordner.set(w.get("ordner", ""))
+        self.var_db.set(str(einstellungen.db_pfad(e)))
+        self.var_backup.set(w.get("backup", ""))
+        self.var_backup_alle.set(w.get("backup_alle", katalog.BACKUP_ALLE))
+        self.var_wach.set(w.get("wach", True))
+        self.ki = dict(w["ki"])
+        bildanalyse.konfigurieren(**self.ki)
+        self._ki_zeigen()
 
     def _einstellungen_speichern(self):
-        """Aktuelle Einstellungen nach gui_einstellungen.json schreiben.
+        """Aktuelle Einstellungen in die gemeinsame Einstellungsdatei schreiben.
+
+        Andere Abschnitte (z. B. 'sweep') bleiben unverändert.
 
         Rückgabe:
             Keine.
         """
-        EINSTELLUNGEN.parent.mkdir(parents=True, exist_ok=True)
-        EINSTELLUNGEN.write_text(json.dumps({
-            "ordner": self.var_ordner.get(), "db": self.var_db.get(),
-            "backup": self.var_backup.get(), "backup_alle": self.var_backup_alle.get(),
-            "wach": self.var_wach.get()}, indent=2, ensure_ascii=False))
+        e = einstellungen.laden()
+        e["db"] = self.var_db.get().strip()
+        try:
+            backup_alle = int(self.var_backup_alle.get())
+        except (tk.TclError, ValueError):
+            backup_alle = katalog.BACKUP_ALLE
+        e["work"].update({"ordner": self.var_ordner.get(), "backup": self.var_backup.get(),
+                          "backup_alle": backup_alle, "wach": self.var_wach.get(),
+                          "ki": dict(self.ki)})
+        try:
+            einstellungen.speichern(e)
+        except OSError as ex:
+            self.meldungen.put(f"Einstellungen nicht gespeichert: {ex}")
+
+    # -------------------------------------------------------- KI-Server
+    def _ki_zeigen(self):
+        """Anzeige des eingestellten KI-Servers aktualisieren.
+
+        Rückgabe:
+            Keine.
+        """
+        modell = self.ki.get("modell") or "⚠ kein Modell gewählt"
+        self.lbl_ki.configure(text=f"{modell}   ·   {self.ki.get('url', '')}",
+                              foreground="" if self.ki.get("modell") else "#b35c00")
+
+    def _ki_einstellen(self):
+        """Dialog „KI-Server“ öffnen und die Werte übernehmen.
+
+        Rückgabe:
+            Keine.
+        """
+        dialog = KiDialog(self.root, self.ki)
+        self.root.wait_window(dialog)
+        if dialog.ergebnis is None:
+            return
+        self.ki = dialog.ergebnis
+        bildanalyse.konfigurieren(**self.ki)
+        self._ki_zeigen()
+        self._einstellungen_speichern()
 
     # ---------------------------------------------------------- Steuerung
     def _start(self):
@@ -476,6 +526,10 @@ class KatalogGUI:
         db = Path(self.var_db.get()).expanduser()
         if not ordner.is_dir():
             messagebox.showerror("Bildordner", "Bitte einen vorhandenen Bildordner wählen.")
+            return
+        if not self.ki.get("modell"):
+            messagebox.showerror("KI-Server", "Bitte zuerst KI-Server und Modell einstellen.")
+            self._ki_einstellen()
             return
         art, _ = self._db_pruefen(db)
         if art == "fremd":
@@ -505,6 +559,7 @@ class KatalogGUI:
         self.btn_start.configure(state="disabled")
         self.btn_pause.configure(state="normal", text="⏸ Pause")
         self.btn_stopp.configure(state="normal")
+        self.btn_ki.configure(state="disabled")      # Server nicht mitten im Lauf wechseln
         self.lbl_status.configure(text="Läuft …")
         self._wach_halten(True)
 
@@ -648,6 +703,7 @@ class KatalogGUI:
             self._db_info_zeigen()
             self._wach_halten(False)
             self.btn_start.configure(state="normal")
+            self.btn_ki.configure(state="normal")
             self.btn_pause.configure(state="disabled", text="⏸ Pause")
             self.btn_stopp.configure(state="disabled")
             gestoppt = k and k.stopp.is_set()
@@ -696,7 +752,7 @@ class KatalogGUI:
             text=(datetime.now() + timedelta(seconds=rest)).strftime("%d.%m.%Y %H:%M")
             if rest else "–")
         if s.get("server_wartet"):
-            self.lbl_status.configure(text="⚠ Warte auf LM Studio …")
+            self.lbl_status.configure(text="⚠ Warte auf KI-Server …")
         elif s.get("pausiert"):
             self.lbl_status.configure(text="⏸ Pausiert – Fortsetzen oder Stopp.")
         elif self.thread and not k.pause.is_set() and not k.stopp.is_set():

@@ -11,11 +11,11 @@ Offene Punkte für die Reifephase. Erledigtes wird gestrichen bzw. in die Versio
 
 ## Work
 
-- [ ] **KI-Endpunkt einstellbar:** URL (`API_URL`, derzeit fest `http://127.0.0.1:1234/v1/chat/completions`)
-  und Modellname (`MODEL`, derzeit fest `qwen/qwen3.5-9b`) gesamthaft in den Einstellungen der Oberfläche
-  pflegbar machen (`bildanalyse.py`), inkl. Verbindungstest.
-- [ ] **RAW-Formate:** CR2/CR3, NEF, ARW, DNG, ORF, RAF usw. unterstützen (derzeit nicht in `ENDUNGEN`).
-  Umwandlung prüfen (macOS `sips` / Core Image kann viele RAW-Formate).
+- [x] ~~**KI-Endpunkt einstellbar**~~ (v0.2: Dialog „KI-Server“, Verbindungstest, Kompatibilitätsstufen)
+- [x] ~~**RAW-Formate**~~ (v0.2: über `sips`) – auf dem Mac mit echten RAW-Dateien prüfen (Drehung, Vorschau)
+- [ ] **Kategorien/Prompt auslagern:** geprüft, zurückgestellt. View liest die Filterwerte dynamisch
+  aus der DB (nur die Feldnamen sind fest) – technisch möglich, aber wechselnde Wertelisten in einer DB
+  zersplittern die Filter. Wenn, dann als Konfigurationsdatei mit eigener `PROMPT_VERSION`.
 
 ## View
 
@@ -24,5 +24,5 @@ Offene Punkte für die Reifephase. Erledigtes wird gestrichen bzw. in die Versio
 
 ## Sweep
 
-- [ ] **Datenbank wählbar:** Auswahl der DB in der Oberfläche (derzeit nur über Work-Einstellungen
-  `gui_einstellungen.json`, Standardort `apps/work/Katalog-DB/` oder Startparameter `sweep.py <pfad>`).
+- [x] ~~**Datenbank wählbar**~~ (v0.2: „Datenbank …“, gespeichert in den gemeinsamen Einstellungen)
+- [x] ~~Kopplung an Work~~ (v0.2: gemeinsamer Code in `shared/bilderwerk`)

@@ -80,7 +80,7 @@ apps/work/
 | `tools/vorschau_nachholen.py` | Fehlende Vorschauen ohne LM Studio erzeugen; fortsetzbar, überspringt „nur online“. | `main()` |
 | `tools/db_struktur.py` | Schema einer DB-Datei ausgeben. | `analyze_db()` |
 
-Jede Datei hat einen Kopf-Docstring (Zweck, Ziel, Aufruf), jede Funktion einen Docstring mit Titel, Erläuterung, Parametern und Rückgabe. Anzeigen z. B. mit `python3.14 -m pydoc bildanalyse`.
+Jede Datei hat einen Kopf-Docstring (Zweck, Ziel, Aufruf), jede Funktion einen Docstring mit Titel, Erläuterung, Parametern und Rückgabe. Anzeigen z. B. mit `python3 -m pydoc bildanalyse`.
 
 ---
 
@@ -88,48 +88,62 @@ Jede Datei hat einen Kopf-Docstring (Zweck, Ziel, Aufruf), jede Funktion einen D
 
 | Komponente | Details |
 |---|---|
-| macOS | nutzt `sips` (Verkleinern, HEIC) und `caffeinate` (Ruhezustand verhindern) |
-| Python | **Homebrew-Python 3.14**: `/opt/homebrew/bin/python3.14` |
+| macOS | nutzt `sips` (Verkleinern, HEIC, RAW) und `caffeinate` (Ruhezustand verhindern) |
+| Python | ab 3.10 mit Tk, empfohlen Homebrew-Python 3.14; die `.command`-Datei sucht es selbst (`shared/python_finden.sh`, abweichend per `BILDERWERK_PYTHON`) |
 | Tk für die GUI | `brew install python-tk@3.14` |
 | Python-Pakete | Pillow, numpy (siehe `requirements.txt`) |
 | ExifTool | `brew install exiftool` – sonst nur Basis-Metadaten, kein HEIC |
 | poppler | `brew install poppler` – nur für PDF-Fotobücher (`pdftoppm`, `pdfinfo`) |
-| LM Studio | lokaler Server `http://127.0.0.1:1234`, Modell `qwen/qwen3.5-9b` (mit Bildverständnis) |
+| KI-Server | OpenAI-kompatibel mit Bildeingabe (LM Studio, Ollama, llama.cpp-Server); Adresse und Modell in der GUI unter **KI-Server → Einstellen …**. Referenz: LM Studio `http://127.0.0.1:1234/v1`, Modell `qwen/qwen3.5-9b` |
 
 ---
 
 ## 5. Starten
 
 ### Vorbereitung (bei jedem Analyselauf)
-1. **LM Studio** öffnen, Modell `qwen/qwen3.5-9b` laden, Server starten (Developer → Status *Running*).
+1. **KI-Server** starten, z. B. LM Studio: Modell `qwen/qwen3.5-9b` laden, Server starten (Developer → Status *Running*).
 2. Mac am Netzteil, Stromsparmodus aus.
 
 ### Oberfläche
 Doppelklick auf **`Bilderwerk Work starten.command`** – oder im Terminal:
 ```bash
-cd work
-/opt/homebrew/bin/python3.14 katalog_gui.py
+cd apps/work
+python3 katalog_gui.py
 ```
-Dann Bildordner wählen, Datenbank öffnen bzw. neu anlegen, optional Sicherungsziel, **▶ Start**.
+Dann Bildordner wählen, Datenbank öffnen bzw. neu anlegen, optional Sicherungsziel, beim ersten Mal
+**KI-Server → Einstellen …** (Adresse, Verbindung testen, Modell wählen), **▶ Start**.
+
+### Einstellungen
+Gemeinsame Datei von Work und Sweep: `~/Library/Application Support/Bilderwerk/einstellungen.json`
+(Datenbank, Abschnitt `work` mit Bildordner, Sicherung, Optionen und KI-Server). Beim ersten Start
+werden die Werte der alten `gui_einstellungen.json` übernommen; diese wird danach nicht mehr genutzt.
+Ohne eingestellte Datenbank schlägt Work `Bildkatalog.db` im selben Ordner vor. Ungültige
+Modellantworten landen in `fehler_antworten/` neben der Datenbank.
+
+Lehnt ein Server Teile der Anfrage ab (HTTP 400, z. B. kein JSON-Schema), versucht Work automatisch
+einfachere Anfragen (Stufen in `bildanalyse.KOMPAT_STUFEN`); Antworten, die das Schema nicht genau
+einhalten, werden ergänzt bzw. angeglichen (`felder_ergaenzen`).
 
 ### Kommandozeile
 ```bash
-cd work
-caffeinate -i python3.14 katalog.py "<Bildordner>" --db "<Datei.db>" --backup "<Sicherung.db>"
-# Test mit den Testbildern in die Standard-Test-DB (Katalog-DB/Bildkatalog.db):
-python3.14 katalog.py testdaten/bilder
+cd apps/work
+caffeinate -i python3 katalog.py "<Bildordner>" --db "<Datei.db>" --backup "<Sicherung.db>"
+# Test mit den Testbildern in die eingestellte Datenbank:
+python3 katalog.py testdaten/bilder
+# Tests (ohne KI-Modell):
+python3 -m unittest discover -s tests
 ```
 
 ### Suche und Werkzeuge
 ```bash
-python3.14 suche.py brille --farbe schwarzweiß
-python3.14 suche.py --statistik
-python3.14 suche.py --fehler
-python3.14 suche.py --zeige 12
-python3.14 tools/bild_test.py testdaten/bilder/set1/*
-python3.14 tools/farbe_neu_messen.py --db "<Datei.db>"
-python3.14 tools/db_struktur.py "<Datei.db>"
-python3.14 tools/vorschau_nachholen.py --db "<Datei.db>" --backup "<Sicherung.db>"
+python3 suche.py brille --farbe schwarzweiß
+python3 suche.py --statistik
+python3 suche.py --fehler
+python3 suche.py --zeige 12
+python3 tools/bild_test.py testdaten/bilder/set1/*
+python3 tools/farbe_neu_messen.py --db "<Datei.db>"
+python3 tools/db_struktur.py "<Datei.db>"
+python3 tools/vorschau_nachholen.py --db "<Datei.db>" --backup "<Sicherung.db>"
 ```
 
 ### Wiederholungslauf über das ganze Archiv
@@ -147,7 +161,7 @@ Dauer: unveränderte Bilder kosten nur einen Dateizugriff – bei 81.000 Bildern
 
 ## 6. Worauf achten
 
-- **Richtiges Python:** immer Homebrew-`python3.14`. Ein anderes Python (Conda-`base`, venv) hat kein Pillow/numpy bzw. Tk → Farbgebung wird nicht gemessen (die GUI zeigt das verwendete Python an und warnt). Nach `brew upgrade` prüfen, ob `python-tk@3.14` mitaktualisiert wurde.
+- **Richtiges Python:** empfohlen Homebrew-`python3.14` (die `.command`-Datei nimmt es bevorzugt). Ein anderes Python (Conda-`base`, venv) hat kein Pillow/numpy bzw. Tk → Farbgebung wird nicht gemessen (die GUI zeigt das verwendete Python an und warnt). Nach `brew upgrade` prüfen, ob `python-tk@3.14` mitaktualisiert wurde.
 - **Ausführungsrecht:** `Bilderwerk Work starten.command` braucht das Ausführungsrecht (`chmod +x`), sonst meldet macOS „keine Zugriffsrechte“.
 - **Sicherung:** Standard alle 1.000 Änderungen; der Wert ist während des Laufs in der GUI änderbar. Am Ende jedes Laufs (auch bei Stopp/Abbruch) wird **immer** gesichert.
 - **Datenbank nicht in Dropbox:** lokal ablegen, Sicherung per `--backup`/GUI nach Dropbox. Die Sicherung wird atomar ersetzt (Dropbox sieht nie eine halbe Datei).
