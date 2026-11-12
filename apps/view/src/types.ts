@@ -122,6 +122,11 @@ export const DATEITYPEN: { label: string; endungen: string[] }[] = [
   { label: "WebP", endungen: [".webp"] },
   { label: "TIFF", endungen: [".tif", ".tiff"] },
   { label: "PDF", endungen: [".pdf"] },
+  // RAW (seit Work v0.2, gleiche Liste wie shared/bilderwerk/bild.py RAW_ENDUNGEN)
+  {
+    label: "RAW",
+    endungen: [".cr2", ".cr3", ".nef", ".nrw", ".arw", ".dng", ".orf", ".raf", ".rw2", ".pef", ".srw"],
+  },
 ];
 
 /** Eine Spalte aus `bilder` mit Wert (Befehl `details`, v0.0.6) */

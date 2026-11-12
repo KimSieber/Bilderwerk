@@ -260,7 +260,8 @@ Alle Tests laufen gegen einen nachgebildeten Server (`Server::starte` in `dropbo
 | F-LOG-01 | `api.test.ts` | `datumDe`: ISO → TT.MM.JJJJ, leer, unplausible Werte roh | v0.0.3 | ✅ |
 | F-LOG-02 | `api.test.ts` | `zahlDe`: Tausenderpunkt | v0.0.3 | ✅ |
 | F-LOG-03 | `api.test.ts` | `api.*` ruft `start`, `db_setzen`, `suchen`, `dropbox_*` mit richtigen Argumenten; Fehler durchgereicht | v0.0.3 | ✅ |
-| F-LOG-04 | `types.test.ts` | `DATEITYPEN` decken alle Katalog-Endungen ab, ohne Dopplung | v0.0.3 | ✅ |
+| F-LOG-04 | `types.test.ts` | `DATEITYPEN` decken alle Katalog-Endungen ab (seit v0.3.2 auch RAW), ohne Dopplung | v0.0.3 · v0.3.2 | ✅ |
+| F-LOG-32 | `types.test.ts` | Gruppe „RAW“ entspricht genau `RAW_ENDUNGEN` in `shared/bilderwerk/bild.py` (Work) | v0.3.2 | ✅ |
 | F-LOG-05 | `types.test.ts` | `istLeer` (App) – Gegenstück zu R-SUCH-03 | v0.0.3 | ✅ |
 | F-LOG-06 | `vorschau.test.ts` | Warteschlange: höchstens 6 gleichzeitig | v0.0.3 | ✅ |
 | F-LOG-07 | `vorschau.test.ts` | LIFO: jüngste Anfrage zuerst | v0.0.3 | ✅ |
@@ -498,3 +499,19 @@ Offen – Prüfung durch Kim auf dem Mac.
 | 9 | App-Menü „Über Bilderwerk View“: eigenes Fenster mit Symbol, Version 0.3.1, Links öffnen Browser bzw. Mail; erneuter Aufruf holt das Fenster nach vorn | ⏳ |
 | 10 | Mac mini: frische Installation ohne einstellungen.json → DB wählen, Regeln über „Erkannte Ordner vorschlagen“ | ⏳ |
 | 11 | hell und dunkel (Dialog, Über-Fenster) | ⏳ |
+
+### v0.3.2 – RAW
+
+Vorab geprüft mit `docs/intern/RAW-Proben/RAW prüfen.command` (10 × CR2: Canon EOS 5D Mark III 2017, EOS 30D 2008):
+Maße in voller Auflösung (5760 × 3840 bzw. 3504 × 2336 – Pillow allein läse bei der 30D nur das eingebettete
+1728 × 1152), KI-Bild 1024 px, DB-Vorschau 640 px, View-Vorschau per sips, Metadaten per ExifTool vollständig;
+je Bild 0,3–0,8 s. Drehung: 5D schreibt `Orientation`/`CameraOrientation`; die 30D-Proben haben „AutoRotate: None“
+(Drehsensor an der Kamera aus) → Hochformatbilder liegen quer, das ist in der Datei so und kein Programmfehler.
+
+| # | Prüfung | Ergebnis |
+|---|---|---|
+| 1 | `npm test` grün (Frontend 158) | ⏳ |
+| 2 | Work-Lauf über `docs/intern/RAW-Proben` in eine Test-DB: alle 10 analysiert, Vorschauen in der DB | ⏳ |
+| 3 | View mit der Test-DB: Dateityp „RAW“ filtert die CR2, Vorschauen, Großansicht, Öffnen | ⏳ |
+| 4 | Sweep mit der Test-DB: CR2 werden angezeigt | ⏳ |
+

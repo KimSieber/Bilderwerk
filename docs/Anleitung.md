@@ -112,6 +112,8 @@ aus den Pixeln messen → Vorschaubild erzeugen → speichern.
 Erfasst werden JPEG, PNG, HEIC/HEIF, TIFF, WebP, gängige RAW-Formate (CR2/CR3, NEF, ARW, DNG, ORF,
 RAF, RW2 …) und jede Seite von PDF-Dateien (z. B. digitalisierte Fotoalben). Sehr kleine Dateien
 (Icons, Thumbnails) und versteckte Ordner werden übergangen.
+RAW-Bilder werden in voller Auflösung gelesen (macOS `sips`). Die Drehung kommt aus der Datei: Hat die
+Kamera keine gespeichert (Drehsensor aus), erscheinen Hochformatbilder quer – wie in jedem anderen Programm.
 
 ### Gut zu wissen
 - **Pause/Stopp** wirken nach dem aktuellen Bild; der Fortschritt ist immer gespeichert.

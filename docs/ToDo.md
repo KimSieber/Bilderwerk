@@ -12,7 +12,10 @@ Offene Punkte für die Reifephase. Erledigtes wird gestrichen bzw. in die Versio
 ## Work
 
 - [x] ~~**KI-Endpunkt einstellbar**~~ (v0.2: Dialog „KI-Server“, Verbindungstest, Kompatibilitätsstufen)
-- [x] ~~**RAW-Formate**~~ (v0.2: über `sips`) – auf dem Mac mit echten RAW-Dateien prüfen (Drehung, Vorschau)
+- [x] ~~**RAW-Formate**~~ (v0.2: über `sips`; v0.3.2 mit echten CR2 von zwei Canon-Kameras geprüft, View-Filter „RAW“)
+- [ ] **RAW „nur online“ in View (Dropbox klassisch):** Dropbox erzeugt für RAW keine Vorschau → View lädt die
+  ganze Datei (oft 20–60 MB). Unkritisch, solange die Vorschau aus der DB kommt (Work legt sie an); sonst ggf.
+  eingebettetes JPEG per HTTP-Range laden.
 - [ ] **Kategorien/Prompt auslagern:** geprüft, zurückgestellt. View liest die Filterwerte dynamisch
   aus der DB (nur die Feldnamen sind fest) – technisch möglich, aber wechselnde Wertelisten in einer DB
   zersplittern die Filter. Wenn, dann als Konfigurationsdatei mit eigener `PROMPT_VERSION`.

@@ -1,6 +1,6 @@
 [package]
 name = "bilderwerk-view"
-version = "0.3.1"
+version = "0.3.2"
 description = "Bilderwerk View – Suche über den KI-Bildkatalog"
 authors = ["Kim Sieber"]
 edition = "2021"
