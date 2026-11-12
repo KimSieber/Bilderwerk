@@ -2,8 +2,9 @@
 
 Liest Dublettengruppen aus der Live-Katalog-DB von Work, liefert Vorschaubilder
 und löscht einzelne Dateien samt Katalog-Einträgen. Für das Entfernen aus der DB
-wird katalog.eintraege_entfernen() von Work genutzt (Original-Nachfolge,
-begriffe/suche/vorschauen bleiben konsistent).
+wird das gemeinsame katalog_db.eintraege_entfernen() genutzt (Original-Nachfolge,
+begriffe/suche/vorschauen bleiben konsistent). Keine Abhängigkeit vom Work-Ordner:
+gemeinsamer Code und Einstellungen liegen in shared/bilderwerk.
 
 Dublette = gleicher SHA-256 der Datei (so wie Work 'duplikat' vergibt).
 PDFs werden je Datei zusammengefasst (Hash '<dateihash>#<seite>' → '<dateihash>')
@@ -12,7 +13,6 @@ und sind nur Hinweis – Löschen ist für PDFs nicht vorgesehen.
 from __future__ import annotations
 
 import csv
-import json
 import os
 import sqlite3
 import sys
@@ -20,28 +20,17 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-def _work_finden() -> Path:
-    """Ordner von Work (enthält katalog.py) finden.
+# Gemeinsamer Code von Work und Sweep liegt in <Repo>/shared
+_SHARED = Path(__file__).resolve().parent.parent.parent / "shared"
+if _SHARED.is_dir() and str(_SHARED) not in sys.path:
+    sys.path.insert(0, str(_SHARED))
+from bilderwerk import einstellungen                                  # noqa: E402
+from bilderwerk.bild import nur_online, vorschau_erzeugen             # noqa: E402
+from bilderwerk.katalog_db import (SCHEMA_VERSION, eintraege_entfernen,  # noqa: E402
+                                   quelle_aufloesen)
 
-    Reihenfolge: Umgebungsvariable BILDERWERK_WORK, dann ../work (Repo),
-    dann jeder Nachbarordner mit katalog.py (Laufzeitumgebung auf dem Mac mini).
-    """
-    hier = Path(__file__).resolve().parent
-    kandidaten = [Path(os.environ["BILDERWERK_WORK"]).expanduser()] \
-        if os.environ.get("BILDERWERK_WORK") else []
-    kandidaten.append(hier.parent / "work")
-    kandidaten += sorted(p for p in hier.parent.iterdir() if p.is_dir() and p != hier)
-    for k in kandidaten:
-        if (k / "katalog.py").is_file() and (k / "bildanalyse.py").is_file():
-            return k
-    raise SystemExit(f"Work (katalog.py) nicht gefunden neben {hier}. "
-                     f"Ordner per BILDERWERK_WORK angeben.")
-
-
-ANALYZER = _work_finden()
-sys.path.insert(0, str(ANALYZER))
-import bildanalyse  # noqa: E402
-import katalog      # noqa: E402
+# Bis v0.1 stand der DB-Pfad in den Work-Einstellungen – Quelle für die Migration
+ALT_EINSTELLUNGEN = Path(__file__).resolve().parent.parent / "work" / "gui_einstellungen.json"
 
 VORSCHAU_PX = 640
 PROTOKOLL_NAME = "sweep_protokoll.csv"
@@ -82,25 +71,37 @@ class Gruppe:
 
 
 def standard_db() -> Path | None:
-    """DB-Pfad aus apps/work/gui_einstellungen.json, sonst Standardort von Work."""
-    try:
-        e = json.loads((ANALYZER / "gui_einstellungen.json").read_text())
-        if e.get("db"):
-            return Path(e["db"]).expanduser()
-    except (OSError, ValueError):
-        pass
-    p = ANALYZER / "Katalog-DB" / "Bildkatalog.db"
+    """Datenbank aus den gemeinsamen Einstellungen (dieselbe wie in Work).
+
+    Rückgabe:
+        Pfad, wenn die Datei existiert, sonst None (dann fragt die Oberfläche).
+    """
+    p = einstellungen.db_pfad(einstellungen.laden(ALT_EINSTELLUNGEN))
     return p if p.exists() else None
+
+
+def db_merken(pfad: Path) -> None:
+    """Gewählte Datenbank in den gemeinsamen Einstellungen speichern (gilt auch für Work).
+
+    Parameter:
+        pfad: Datenbankdatei.
+
+    Fehler:
+        OSError, wenn die Einstellungen nicht geschrieben werden können.
+    """
+    e = einstellungen.laden(ALT_EINSTELLUNGEN)
+    e["db"] = str(pfad)
+    einstellungen.speichern(e)
 
 
 def verbinden(pfad: Path) -> sqlite3.Connection:
     """Live-DB öffnen (ohne Schemaänderung). Wartet bis 30 s auf Sperren von Work."""
     db = sqlite3.connect(pfad, timeout=30, check_same_thread=False)
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version != katalog.SCHEMA_VERSION:
+    if version != SCHEMA_VERSION:
         db.close()
-        raise ValueError(f"Unerwartete Schema-Version {version} "
-                         f"(erwartet {katalog.SCHEMA_VERSION}): {pfad}")
+        raise ValueError(f"Keine passende Katalog-Datenbank (Schema-Version {version}, "
+                         f"erwartet {SCHEMA_VERSION}): {pfad}")
     return db
 
 
@@ -115,7 +116,7 @@ def gruppen_laden(db: sqlite3.Connection) -> list[Gruppe]:
     for bild_id, pfad, h, breite, hoehe, groesse, seite, seiten in zeilen:
         ist_pdf = seite is not None
         datei_hash = h.split("#", 1)[0] if ist_pdf else h
-        datei_pfad = str(bildanalyse.quelle_aufloesen(pfad)[0]) if ist_pdf else pfad
+        datei_pfad = str(quelle_aufloesen(pfad)[0]) if ist_pdf else pfad
         dateien = gruppen.setdefault(datei_hash, {})
         d = dateien.get(datei_pfad)
         if d is None:
@@ -143,10 +144,10 @@ def vorschau(db: sqlite3.Connection, datei: Datei) -> tuple[bytes | None, str]:
     p = Path(datei.pfad)
     if not p.exists():
         return None, "Datei nicht vorhanden"
-    if bildanalyse.nur_online(p):
+    if nur_online(p):
         return None, "Nur online (Dropbox) – keine Vorschau"
     try:
-        jpeg, _, _ = bildanalyse.vorschau_erzeugen(p, 1 if datei.ist_pdf else None)
+        jpeg, _, _ = vorschau_erzeugen(p, 1 if datei.ist_pdf else None)
         return jpeg, ""
     except Exception as ex:  # Anzeige darf nie abbrechen
         return None, f"Keine Vorschau: {type(ex).__name__}"
@@ -169,7 +170,7 @@ def loeschen(db: sqlite3.Connection, gruppe: Gruppe, datei: Datei, protokoll: Pa
     except FileNotFoundError:
         pass
     try:
-        katalog.eintraege_entfernen(db, datei.ids)
+        eintraege_entfernen(db, datei.ids)
         db.commit()
     except Exception:
         db.rollback()

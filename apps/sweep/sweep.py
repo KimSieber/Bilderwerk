@@ -1,7 +1,9 @@
 """Bilderwerk Sweep – Dubletten im Bildkatalog sichten und einzeln löschen.
 
 Start:  python3 sweep.py [Pfad/zur/Bildkatalog.db]
-Ohne Angabe: DB aus apps/work/gui_einstellungen.json bzw. Dateiauswahl.
+Ohne Angabe: Datenbank aus den gemeinsamen Einstellungen (dieselbe wie in Work),
+sonst Dateiauswahl. Über „Datenbank …“ jederzeit wechselbar; die Wahl wird in den
+gemeinsamen Einstellungen gespeichert (gilt damit auch für Work).
 
 Arbeitet auf der LIVE-DB (Mac mini, parallel zum Work) – nie auf der Sicherung.
 Links: Gruppen identischer Dateien. Rechts: Vorschau, Name, Ablageort, Auflösung,
@@ -25,29 +27,79 @@ KARTE_PX = 480  # Anzeigegröße der Vorschau (aus 640-px-Vorschau verkleinert)
 
 
 class SweepApp(tk.Tk):
-    def __init__(self, db_pfad: Path):
+    def __init__(self, db_pfad: Path | None):
         super().__init__()
-        self.title(f"Bilderwerk Sweep – {db_pfad}")
         self.geometry("1500x900")
-        self.db_pfad = db_pfad
-        self.db = daten.verbinden(db_pfad)
-        self.protokoll = daten.protokoll_pfad(db_pfad)
+        self.db_pfad: Path | None = None
+        self.db = None
+        self.protokoll: Path | None = None
         self.gruppen: list[daten.Gruppe] = []
         self.bilder: list[ImageTk.PhotoImage] = []   # Referenzen halten
         self.pdf_zeigen = tk.BooleanVar(value=True)
         self._oberflaeche()
+        self.title("Bilderwerk Sweep")
+        if db_pfad and self._db_oeffnen(db_pfad, merken=False):
+            return
+        # keine (passende) Datenbank: gleich nach dem Start wählen lassen
+        self.after(100, self._db_waehlen)
+
+    # -- Datenbank -----------------------------------------------------------
+    def _db_oeffnen(self, pfad: Path, merken: bool = True) -> bool:
+        """Datenbank öffnen und anzeigen; bei Fehler bleibt die bisherige aktiv.
+
+        Parameter:
+            pfad:   Datenbankdatei.
+            merken: Wahl in den gemeinsamen Einstellungen speichern.
+
+        Rückgabe:
+            True bei Erfolg.
+        """
+        try:
+            neu = daten.verbinden(pfad)
+        except Exception as ex:
+            messagebox.showerror("Datenbank", f"Datenbank nicht nutzbar:\n{pfad}\n\n{ex}")
+            return False
+        if self.db is not None:
+            self.db.close()
+        self.db, self.db_pfad = neu, pfad
+        self.protokoll = daten.protokoll_pfad(pfad)
+        self.title(f"Bilderwerk Sweep – {pfad}")
+        self.lbl_protokoll.config(text=f"Protokoll: {self.protokoll}")
+        if merken:
+            try:
+                daten.db_merken(pfad)
+            except OSError as ex:
+                messagebox.showwarning("Einstellungen", f"Wahl nicht gespeichert: {ex}")
         self.laden()
+        return True
+
+    def _db_waehlen(self):
+        """Datenbank per Dialog wählen (Menü „Datenbank …“).
+
+        Rückgabe:
+            Keine.
+        """
+        start = self.db_pfad.parent if self.db_pfad else Path.home()
+        gewaehlt = filedialog.askopenfilename(
+            parent=self, title="Live-Katalog-DB wählen (nicht die Sicherung)",
+            initialdir=str(start), filetypes=[("SQLite-Datenbank", "*.db"), ("Alle", "*")])
+        if gewaehlt and Path(gewaehlt) != self.db_pfad:
+            self._db_oeffnen(Path(gewaehlt))
+        elif not gewaehlt and self.db is None:
+            self.status.config(text="Keine Datenbank geöffnet – „Datenbank …“ wählen.")
 
     # -- Aufbau --------------------------------------------------------------
     def _oberflaeche(self):
         leiste = ttk.Frame(self, padding=6)
         leiste.pack(fill="x")
-        ttk.Button(leiste, text="Neu laden", command=self.laden).pack(side="left")
+        ttk.Button(leiste, text="Datenbank …", command=self._db_waehlen).pack(side="left")
+        ttk.Button(leiste, text="Neu laden", command=self.laden).pack(side="left", padx=(6, 0))
         ttk.Checkbutton(leiste, text="PDFs anzeigen", variable=self.pdf_zeigen,
                         command=self._liste_fuellen).pack(side="left", padx=10)
         self.status = ttk.Label(leiste, text="")
         self.status.pack(side="left", padx=10)
-        ttk.Label(leiste, text=f"Protokoll: {self.protokoll}", foreground="gray").pack(side="right")
+        self.lbl_protokoll = ttk.Label(leiste, text="", foreground="gray")
+        self.lbl_protokoll.pack(side="right")
 
         teil = ttk.PanedWindow(self, orient="horizontal")
         teil.pack(fill="both", expand=True)
@@ -113,6 +165,8 @@ class SweepApp(tk.Tk):
 
     # -- Daten ---------------------------------------------------------------
     def laden(self):
+        if self.db is None:
+            return
         self.config(cursor="watch")
         self.update_idletasks()
         try:
@@ -232,16 +286,7 @@ class SweepApp(tk.Tk):
 
 def main():
     pfad = Path(sys.argv[1]).expanduser() if len(sys.argv) > 1 else daten.standard_db()
-    if not pfad or not pfad.exists():
-        wurzel = tk.Tk()
-        wurzel.withdraw()
-        gewaehlt = filedialog.askopenfilename(title="Live-Katalog-DB wählen",
-                                              filetypes=[("SQLite", "*.db"), ("Alle", "*")])
-        wurzel.destroy()
-        if not gewaehlt:
-            return
-        pfad = Path(gewaehlt)
-    SweepApp(pfad).mainloop()
+    SweepApp(pfad if pfad and pfad.exists() else None).mainloop()
 
 
 if __name__ == "__main__":

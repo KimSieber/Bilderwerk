@@ -1,3 +1,4 @@
 #!/bin/zsh
 cd "$(dirname "$0")"
-exec /opt/homebrew/bin/python3.14 sweep.py
+source ../../shared/python_finden.sh ../work/requirements.txt || { read -k1 "?Taste drücken …"; exit 1; }
+exec "$PYTHON" sweep.py

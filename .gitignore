@@ -44,6 +44,8 @@ cache/
 # interne/temporäre Unterlagen (Übergaben, Review-Ergebnisse) – nie ins Repo
 apps/view/docs/intern/
 docs/intern/
+# Webseite bilderwerk.sieber-bw.de – nicht im Repo
+/Webseite/
 # lokale Pfade (DB-Sicherung usw.) – Vorlage: view.local.example.json
 view.local.json
 .env

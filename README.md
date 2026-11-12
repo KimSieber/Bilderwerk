@@ -5,11 +5,13 @@ Alle Daten bleiben auf dem eigenen Rechner.
 
 | Komponente | Aufgabe | Technik | Ordner |
 |---|---|---|---|
-| **Bilderwerk Work** | Bilder mit einem lokalen KI-Modell (LM Studio) analysieren und in der Katalog-DB erfassen | Python / tkinter | [`apps/work/`](apps/work/) |
+| **Bilderwerk Work** | Bilder mit einem lokalen KI-Modell (z. B. LM Studio) analysieren und in der Katalog-DB erfassen | Python / tkinter | [`apps/work/`](apps/work/) |
 | **Bilderwerk View** | Katalog durchsuchen (Freitext, Facetten) und Bilder anzeigen | Tauri 2 · React · Rust | [`apps/view/`](apps/view/) |
 | **Bilderwerk Sweep** | Dubletten sichten und bereinigen | Python / tkinter | [`apps/sweep/`](apps/sweep/) |
 
-Gemeinsame Grundlage ist die SQLite-Datenbank `Bildkatalog.db`. Ihr Schema steht in [`shared/`](shared/).
+Gemeinsame Grundlage ist die SQLite-Datenbank `Bildkatalog.db`.
+
+**Einstieg:** [Anleitung](docs/Anleitung.md) – was die Programme tun, was man braucht, wie man eine lokale KI anbindet.
 
 ## Aufbau
 
@@ -18,7 +20,7 @@ Bilderwerk/
   apps/work/    Bildanalyse, erzeugt Bildkatalog.db
   apps/view/    Suche und Anzeige (liest die DB nur)
   apps/sweep/   Dublettenbereinigung
-  shared/       DB-Schema (gemeinsamer Vertrag)
+  shared/       gemeinsamer Python-Code von Work und Sweep (Einstellungen, DB-Zugriff, Vorschau)
   docs/         übergreifende Dokumentation
 ```
 
