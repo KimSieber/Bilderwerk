@@ -155,5 +155,19 @@ class ServerTest(unittest.TestCase):
             bildanalyse._anfrage("prompt", "AAAA", 1)
 
 
+class BilderFindenTest(unittest.TestCase):
+    def test_platzhalter_werden_gemeldet(self):
+        import katalog
+        with tempfile.TemporaryDirectory() as t:
+            (Path(t) / "leer.jpg").write_bytes(b"")              # „nur online“
+            (Path(t) / "echt.jpg").write_bytes(b"x" * katalog.MIN_BYTES)
+            (Path(t) / "icon.png").write_bytes(b"x" * 10)        # zu klein, keine Warnung
+            meldungen = []
+            einheiten = katalog.bilder_finden(Path(t), melden=meldungen.append)
+        self.assertEqual([e.datei.name for e in einheiten], ["echt.jpg"])
+        self.assertEqual(len(meldungen), 1)
+        self.assertIn("1 Bilder liegen nur online", meldungen[0])
+
+
 if __name__ == "__main__":
     unittest.main()

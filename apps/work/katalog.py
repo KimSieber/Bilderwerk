@@ -372,7 +372,8 @@ def bilder_finden(wurzel: Path, melden=print,
     """Alle zu katalogisierenden Bilder und PDF-Seiten eines Ordners finden.
 
     Rekursiv; berücksichtigt ENDUNGEN und PDFs, ignoriert versteckte Dateien und
-    Ordner (z. B. '._xyz', '.Trash') sowie Dateien unter MIN_BYTES. Jede
+    Ordner (z. B. '._xyz', '.Trash') sowie Dateien unter MIN_BYTES; Cloud-Platzhalter
+    („nur online“, 0 Byte) werden gezählt und als Warnung gemeldet. Jede
     PDF-Seite wird eine eigene Einheit (nur wenn poppler installiert ist).
 
     Bei unveränderten PDFs (gleiche Größe und Änderungszeit wie in der
@@ -388,16 +389,22 @@ def bilder_finden(wurzel: Path, melden=print,
         Liste von Einheit, sortiert nach Ordner, Dateiname und Seite.
     """
     dateien = []
+    nur_online = 0           # Cloud-Platzhalter mit Groesse 0 (Dropbox/iCloud „nur online“)
     for p in wurzel.rglob("*"):
         if any(t.startswith(".") for t in p.relative_to(wurzel).parts):
             continue
         try:
             endung = p.suffix.lower()
-            if ((endung in ENDUNGEN or endung == PDF_ENDUNG)
-                    and p.is_file() and p.stat().st_size >= MIN_BYTES):
-                dateien.append(p)
+            if (endung in ENDUNGEN or endung == PDF_ENDUNG) and p.is_file():
+                if p.stat().st_size >= MIN_BYTES:
+                    dateien.append(p)
+                elif bildanalyse.nur_online(p):
+                    nur_online += 1
         except OSError:
             continue
+    if nur_online:
+        melden(f"WARNUNG | {nur_online} Bilder liegen nur online (Cloud-Platzhalter, 0 Byte) "
+               f"und werden übersprungen - Ordner offline verfügbar machen")
     dateien.sort(key=lambda p: (str(p.parent).lower(), p.name.lower()))
 
     einheiten = []
