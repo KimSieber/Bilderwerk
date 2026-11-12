@@ -62,8 +62,9 @@ getestet – die Qualität der Beschreibungen hängt stark vom Modell ab.
 Einrichtung in Kurzform:
 1. LM Studio installieren (lmstudio.ai).
 2. Im Modellkatalog `qwen3.5-9b` (Vision-Variante) suchen und laden.
-3. Bereich *Developer*: Modell laden, **Kontextlänge mindestens 8192** einstellen (Bild, Anweisung und
-   Antwort brauchen zusammen mehrere tausend Token), Server starten (Status *Running*).
+3. Bereich *Developer*: Modell laden, **Kontextlänge mindestens 8192** einstellen (rechts unter
+   *Load → Context and Offload*; Bild, Anweisung und Antwort brauchen zusammen mehrere tausend Token,
+   8192 reicht, mehr kostet nur Speicher), Server starten (Status *Running*).
    Standardadresse: `http://127.0.0.1:1234/v1`.
 4. In Work: **KI-Server → Einstellen …**, Adresse eintragen, **Verbindung testen**, Modell aus der
    Liste wählen, **Übernehmen**.
@@ -80,8 +81,9 @@ Ein API-Schlüssel ist lokal meist nicht nötig; das Feld ist für Server gedach
 
 ### Hinweise zur Modellwahl
 - **Vision-fähig** muss es sein – reine Textmodelle melden einen Fehler oder erfinden Inhalte.
-- **Größe:** Modelle um 7–9 Mrd. Parameter (quantisiert) sind ein guter Kompromiss; sie brauchen grob
-  8 GB freien Arbeitsspeicher. Größere Modelle beschreiben genauer, sind aber deutlich langsamer.
+- **Größe:** Modelle um 7–9 Mrd. Parameter (quantisiert) sind ein guter Kompromiss. Qwen 3.5 9B belegt
+  geladen rund 6 GB (LM Studio zeigt „Size 5.98 GB“); mit Kontext 8192 sollten grob 8 GB Arbeitsspeicher
+  frei sein. Größere Modelle beschreiben genauer, sind aber deutlich langsamer.
 - **„Denkende“ Modelle** (Reasoning) schreiben vor der Antwort lange Gedankengänge – das kostet viel
   Zeit. Work schaltet das Denken bei Qwen ab; bei anderen Modellen ggf. eine Variante ohne Reasoning wählen.
 - **Schnittstelle:** Work verlangt die Antwort zuerst mit festem JSON-Schema. Lehnt ein Server das ab,
