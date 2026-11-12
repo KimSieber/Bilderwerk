@@ -5,9 +5,9 @@ use crate::{db, settings};
 use rusqlite::Connection;
 use std::path::Path;
 
-/// Programmstart: DB aus den Einstellungen (oder dem Vorschlag) öffnen.
-pub fn start(config_dir: &Path, vorschlag: Option<&str>) -> Result<(String, Connection, db::DbInfo), String> {
-    let e = settings::laden_mit(config_dir, vorschlag);
+/// Programmstart: DB aus den Einstellungen öffnen (ohne Eintrag zeigt die Oberfläche die Auswahl).
+pub fn start(config_dir: &Path) -> Result<(String, Connection, db::DbInfo), String> {
+    let e = settings::laden(config_dir);
     let pfad = e.db_pfad.ok_or("Noch keine Datenbank ausgewählt.")?;
     oeffnen(&pfad)
 }
@@ -15,7 +15,7 @@ pub fn start(config_dir: &Path, vorschlag: Option<&str>) -> Result<(String, Conn
 /// Neue DB wählen: öffnen, prüfen, nur im Erfolgsfall als Einstellung speichern.
 pub fn db_setzen(config_dir: &Path, pfad: &str) -> Result<(String, Connection, db::DbInfo), String> {
     let r = oeffnen(pfad)?;
-    let mut e = settings::laden_mit(config_dir, None);
+    let mut e = settings::laden(config_dir);
     e.db_pfad = Some(pfad.to_string());
     settings::speichern(config_dir, &e)?;
     Ok(r)

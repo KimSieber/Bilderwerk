@@ -506,3 +506,49 @@ fn original_bereitstellen() {
     let (a, w) = anbieter(&tmp("orig2"), Some(konto(&s, false)));
     assert!(a.original_bereitstellen(&format!("{w}/Archiv/online.jpg")).unwrap_err().contains("anmelden"));
 }
+
+/// R-DBX-23 (v0.3): Speicher neu aufbauen – gleicher App-Schlüssel behält Konto und Anmeldung,
+/// anderer Schlüssel meldet das alte Konto ab, leerer Schlüssel → kein Konto, Dropbox-Ordner wie lokal.
+#[test]
+fn speicher_neu_aufbauen() {
+    use crate::settings::Einstellungen;
+    use crate::speicher::{Regel, Speicher};
+    let d = tmp("aufbau");
+    let s = Server::starte(standard);
+    let mit_key = |k: &str| Arc::new(Konto::mit_basis(k, Box::new(ImSpeicher::default()), s.basis(), "x", warte_nicht));
+    let e = |key: Option<&str>| Einstellungen {
+        dropbox_app_key: key.map(String::from),
+        anbieter: Some(vec![Regel { pfad: "/X".into(), art: "dropbox-klassisch".into() }]),
+        ..Default::default()
+    };
+    let (erst, fehler) = Speicher::aufbauen(&e(Some("APPKEY")), &d, None, |_| konto(&s, true));
+    assert!(fehler.is_none());
+    assert_eq!(erst.verteiler.fuer("/X/a.jpg").art(), "dropbox-klassisch");
+    let k1 = erst.konto.clone().unwrap();
+    assert!(k1.angemeldet());
+
+    // gleicher Schlüssel → dasselbe Konto, weiter angemeldet
+    let (zweit, _) = Speicher::aufbauen(&e(Some("APPKEY")), &d, Some(&erst), |_| panic!("kein neues Konto"));
+    assert!(Arc::ptr_eq(&k1, zweit.konto.as_ref().unwrap()));
+    assert!(k1.angemeldet());
+
+    // anderer Schlüssel → altes Konto abgemeldet (Token widerrufen), neues Konto mit neuem Schlüssel
+    let (dritt, _) = Speicher::aufbauen(&e(Some("NEU")), &d, Some(&zweit), mit_key);
+    assert!(!k1.angemeldet(), "altes Konto abgemeldet");
+    assert_eq!(s.anfragen("/2/auth/token/revoke").len(), 1, "Token widerrufen");
+    assert_eq!(dritt.konto.as_ref().unwrap().app_key(), "NEU");
+
+    // ohne Schlüssel → kein Konto; Regel bleibt, Datei verhält sich wie lokal
+    let (viert, _) = Speicher::aufbauen(&e(Some("")), &d, Some(&dritt), mit_key);
+    assert!(viert.konto.is_none());
+    assert_eq!(viert.verteiler.fuer("/X/a.jpg").art(), "dropbox-klassisch");
+
+    // ungültige Regeln → Fehler, alles lokal
+    let kaputt = Einstellungen { anbieter: Some(vec![Regel { pfad: "rel".into(), art: "lokal".into() }]), ..Default::default() };
+    let (f, fehler) = Speicher::aufbauen(&kaputt, &d, None, mit_key);
+    assert!(fehler.unwrap().contains("absolut"));
+    assert_eq!(f.verteiler.fuer("/X/a.jpg").art(), "lokal");
+    // Standard ohne Eintrag: mitgelieferter Schlüssel
+    let (g, _) = Speicher::aufbauen(&Einstellungen::default(), &d, None, mit_key);
+    assert_eq!(g.konto.unwrap().app_key(), crate::settings::STANDARD_DROPBOX_APP_KEY);
+}

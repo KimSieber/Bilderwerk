@@ -132,6 +132,27 @@ ihre Sicherungskopie) wählen. Suche per Freitext über Beschreibung, Schlagwort
 Ablageort; Filter links schränken weiter ein. Bilder lassen sich groß anzeigen, im Finder zeigen,
 öffnen und teilen. View ändert die Datenbank nicht und bemerkt, wenn eine Sicherungskopie ersetzt wurde.
 
+### Einrichtung (⌘, oder DB-Menü → „Einstellungen…“)
+
+View läuft auf jedem Mac mit eigenen Einstellungen. Änderungen gelten nach **Übernehmen** sofort.
+
+- **Datenbank** – Katalog oder Sicherungskopie wechseln.
+- **Vorschau-Cache** – Obergrenze in MB (Standard 2048), „Cache leeren“.
+- **Speicherorte** – je Ordner, wie View an Vorschau und Original kommt. Es gilt der längste passende
+  Ordner, ohne passende Regel „Lokal“. **Erkannte Ordner vorschlagen** trägt gefundene Cloud-Ordner ein.
+
+  | Art | Für | Datei „nur online“ |
+  |---|---|---|
+  | Lokal | eigene Platte, externe Laufwerke | Wolke, es wird nichts geladen |
+  | Cloud (File Provider) | iCloud, OneDrive, Google Drive, neue Dropbox (`~/Library/CloudStorage`) | lädt beim Lesen still nach |
+  | Dropbox (klassisch) | Dropbox im Ordner `~/Dropbox` | Vorschau über die Dropbox-API, Original wird bei Bedarf geladen |
+
+- **Dropbox** – mitgelieferter App-Schlüssel ist eingetragen; **Bei Dropbox anmelden…** öffnet den
+  Browser. Der Zugang gilt nur für das eigene Konto, das Token liegt im Schlüsselbund. Ohne Schlüssel
+  behandelt View Dropbox-Ordner wie lokale Ordner (Dateien „nur online“ ohne Vorschau).
+
+**Über Bilderwerk View** (App-Menü) zeigt Version, Webseite, Kontakt und Lizenz.
+
 ---
 
 ## 6. Bilderwerk Sweep
@@ -152,7 +173,7 @@ KI-Analyse geht nicht verloren, eine verbleibende Kopie übernimmt sie. Jede Lö
 | Was | Ort |
 |---|---|
 | Einstellungen Work und Sweep | `~/Library/Application Support/Bilderwerk/einstellungen.json` |
-| Einstellungen View | `~/Library/Application Support/de.sieber-bw.bilderwerk.view/` |
+| Einstellungen View | `~/Library/Application Support/de.sieber-bw.bilderwerk.view/einstellungen.json` (Dropbox-Token im Schlüsselbund) |
 | Katalog-Datenbank | frei wählbar; Vorschlag: `~/Library/Application Support/Bilderwerk/Bildkatalog.db` |
 | Protokoll eines Laufs | `<Datenbankname>_protokoll.txt` neben der Datenbank |
 | Unbrauchbare KI-Antworten | `fehler_antworten/` neben der Datenbank |

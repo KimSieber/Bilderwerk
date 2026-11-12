@@ -19,8 +19,10 @@ Offene Punkte für die Reifephase. Erledigtes wird gestrichen bzw. in die Versio
 
 ## View
 
-- [ ] **About-Fenster ausbauen:** eigenes Fenster mit klickbarer Webseite (bilderwerk.sieber-bw.de),
-  E-Mail (Bilderwerk@sieber-bw.de), Lizenzhinweis (PolyForm Noncommercial), Version.
+- [x] ~~**Werte zur Laufzeit**~~ (v0.3: Einstellungsdialog statt `view.local.json`, Speicherorte, Dropbox-App-Schlüssel)
+- [x] ~~**About-Fenster ausbauen**~~ (v0.3: eigenes Fenster mit Webseite, E-Mail, Lizenz, Version)
+- [ ] **Verteilung:** Notarisierung; Dropbox-App „Produktion beantragen“, sobald sich ~50 Konten verbinden
+  (vorher in der App-Console „Enable additional users“ für andere Konten)
 
 ## Sweep
 

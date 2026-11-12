@@ -93,4 +93,16 @@ describe("api Detailbereich (F-LOG-26)", () => {
     await api.teilen("/a.jpg", [1, 2, 3, 4]);
     expect(inv).toHaveBeenLastCalledWith("teilen", { pfad: "/a.jpg", knopf: [1, 2, 3, 4] });
   });
+
+  it("Einstellungen: Befehle und Argumente (F-LOG-31)", async () => {
+    const inv = vi.mocked(invoke);
+    inv.mockResolvedValue(undefined);
+    await api.einstellungen();
+    expect(inv).toHaveBeenLastCalledWith("einstellungen");
+    const aenderung = { cacheGrenzeMb: 500, anbieter: [{ pfad: "/", art: "lokal" as const }], dropboxAppKey: "" };
+    await api.einstellungenSetzen(aenderung);
+    expect(inv).toHaveBeenLastCalledWith("einstellungen_setzen", { aenderung });
+    await api.anbieterVorschlaege();
+    expect(inv).toHaveBeenLastCalledWith("anbieter_vorschlaege");
+  });
 });

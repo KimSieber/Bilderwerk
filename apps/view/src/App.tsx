@@ -10,6 +10,7 @@ import DbMenu from "./components/DbMenu";
 import Detailbereich from "./components/Detailbereich";
 import Teiler from "./components/Teiler";
 import Grossansicht from "./components/Grossansicht";
+import EinstellungenDialog from "./components/EinstellungenDialog";
 import { begrenzen, DETAIL_STANDARD } from "./teiler";
 
 type Zustand =
@@ -57,6 +58,11 @@ export default function App() {
   const [facetten, setFacetten] = useState<Facette[]>([]);
   const [details, setDetails] = useState<boolean>(detailsGemerkt);
   const [grossOffen, setGrossOffen] = useState(false);
+  const [einstOffen, setEinstOffen] = useState(false);
+  const einstellungenOeffnen = useCallback(() => {
+    setGrossOffen(false);
+    setEinstOffen(true);
+  }, []);
   /** zählt hoch, wenn die DB neu geladen wurde → Suche, Facetten, Details frisch holen */
   const [stand, setStand] = useState(0);
   const [meldung, setMeldung] = useState<string | null>(null);
@@ -98,18 +104,23 @@ export default function App() {
     return () => window.clearTimeout(t);
   }, [meldung]);
 
-  // „Vorschau-Cache leeren“ aus dem App-Menü (oder DB-Menü): alle Vorschauen neu anfordern
+  // „Vorschau-Cache leeren“ (App-Menü oder Einstellungen) und neue Speicherorte/Dropbox-Schlüssel (v0.3):
+  // alle Vorschauen neu anfordern. „einstellungen-oeffnen“ kommt aus dem App-Menü (⌘,).
   useEffect(() => {
-    let ab: (() => void) | undefined;
+    const ab: (() => void)[] = [];
     let aus = false;
-    listen("cache-geleert", () => alleNeuLaden())
-      .then((f) => (aus ? f() : (ab = f)))
-      .catch(() => {});
+    const hoeren = (name: string, f: () => void) =>
+      listen(name, f)
+        .then((weg) => (aus ? weg() : ab.push(weg)))
+        .catch(() => {});
+    hoeren("cache-geleert", () => alleNeuLaden());
+    hoeren("speicher-neu", () => alleNeuLaden());
+    hoeren("einstellungen-oeffnen", einstellungenOeffnen);
     return () => {
       aus = true;
-      ab?.();
+      ab.forEach((f) => f());
     };
-  }, []);
+  }, [einstellungenOeffnen]);
 
   const dbWaehlen = useCallback(async () => {
     const pfad = await open({
@@ -248,17 +259,32 @@ export default function App() {
         <span className="titelleiste__name" data-tauri-drag-region>
           Bilderwerk View
         </span>
-        {zustand.art === "bereit" && <DbMenu info={zustand.info} onWechseln={dbWaehlen} />}
+        {zustand.art === "bereit" && (
+          <DbMenu info={zustand.info} onWechseln={dbWaehlen} onEinstellungen={einstellungenOeffnen} />
+        )}
       </div>
 
       {zustand.art === "ohneDb" && (
         <div className="einrichtung">
           <h1>Bilderwerk View</h1>
           <p>{zustand.meldung}</p>
-          <button className="knopf knopf--primaer" onClick={dbWaehlen}>
-            Bildkatalog auswählen…
-          </button>
+          <div className="einrichtung__knoepfe">
+            <button className="knopf knopf--primaer" onClick={dbWaehlen}>
+              Bildkatalog auswählen…
+            </button>
+            <button className="knopf" onClick={einstellungenOeffnen}>
+              Einstellungen…
+            </button>
+          </div>
         </div>
+      )}
+
+      {einstOffen && (
+        <EinstellungenDialog
+          db={zustand.art === "bereit" ? zustand.info : null}
+          onDbWechseln={dbWaehlen}
+          onSchliessen={() => setEinstOffen(false)}
+        />
       )}
 
       {zustand.art === "bereit" && (

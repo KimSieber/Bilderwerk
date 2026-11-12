@@ -1,5 +1,5 @@
 //! Anbieter-Schnittstelle: kapselt, wie View an Vorschau und Original einer Datei kommt.
-//! Welcher Anbieter für einen Pfad gilt, entscheidet die Zuordnung in view.local.json (ab Schritt 3).
+//! Welcher Anbieter für einen Pfad gilt, entscheiden die Regeln in den Einstellungen (seit v0.3, vorher view.local.json).
 //!
 //! | Anbieter        | Wann                                        | Nur-online-Datei                          |
 //! |-----------------|---------------------------------------------|-------------------------------------------|
@@ -15,6 +15,45 @@ pub use zuordnung::{Regel, Verteiler};
 use crate::thumbs::{self, quelle, Vorschau};
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+/// Verteiler und Dropbox-Konto, wie sie aus den Einstellungen folgen. Im AppState austauschbar (v0.3):
+/// Änderungen im Einstellungsdialog wirken ohne Neustart.
+#[derive(Clone)]
+pub struct Speicher {
+    pub verteiler: Arc<Verteiler>,
+    /// None = kein App-Schlüssel → Dropbox-Ordner verhalten sich wie `lokal`
+    pub konto: Option<Arc<Konto>>,
+}
+
+impl Speicher {
+    /// Baut Verteiler und Konto aus den Einstellungen. `alt`: bisheriger Stand – bleibt der App-Schlüssel gleich,
+    /// wird das Konto weiterverwendet (Anmeldung bleibt); wechselt er, wird das alte Konto abgemeldet, denn
+    /// sein Token gehört zur alten Dropbox-App. `neues_konto` legt ein Konto für einen Schlüssel an.
+    /// Zweiter Rückgabewert: Fehler in den Regeln (dann alles `lokal`).
+    pub fn aufbauen(
+        e: &crate::settings::Einstellungen,
+        cache: &Path,
+        alt: Option<&Speicher>,
+        neues_konto: impl FnOnce(&str) -> Arc<Konto>,
+    ) -> (Self, Option<String>) {
+        let key = e.app_key();
+        let alt_konto = alt.and_then(|s| s.konto.clone());
+        let konto = match (alt_konto, key) {
+            (Some(k), Some(neu)) if k.app_key() == neu => Some(k),
+            (alt_konto, neu) => {
+                if let Some(k) = alt_konto {
+                    if let Err(f) = k.abmelden() {
+                        eprintln!("View: Abmelden der bisherigen Dropbox-App fehlgeschlagen ({f})");
+                    }
+                }
+                neu.map(neues_konto)
+            }
+        };
+        let (verteiler, fehler) = Verteiler::aus_regeln(e.regeln(), cache, konto.clone());
+        (Self { verteiler: Arc::new(verteiler), konto }, fehler)
+    }
+}
 
 /// Wo liegt der Inhalt einer Datei?
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,7 +67,7 @@ pub enum Zustand {
 }
 
 pub trait Speicheranbieter: Send + Sync {
-    /// Kurzname wie in view.local.json (`lokal`, `file-provider`, …)
+    /// Kurzname wie in den Regeln (`lokal`, `file-provider`, …)
     fn art(&self) -> &'static str;
     /// Zustand der Datei hinter `pfad` (PDF-Seiten `…#seite=N` → die PDF-Datei)
     fn zustand(&self, pfad: &str) -> Zustand;

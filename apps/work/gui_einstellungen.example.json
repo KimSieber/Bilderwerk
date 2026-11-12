@@ -1,7 +1,0 @@
-{
-  "ordner": "~/Pfad/zum/Bilderarchiv",
-  "db": "~/Pfad/zur/Bildkatalog.db",
-  "backup": "~/Pfad/zur/Sicherung/Bildkatalog.db",
-  "backup_alle": 1000,
-  "wach": true
-}

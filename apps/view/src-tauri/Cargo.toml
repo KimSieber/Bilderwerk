@@ -1,6 +1,6 @@
 [package]
 name = "bilderwerk-view"
-version = "0.1.0"
+version = "0.3.1"
 description = "Bilderwerk View – Suche über den KI-Bildkatalog"
 authors = ["Kim Sieber"]
 edition = "2021"
@@ -17,7 +17,6 @@ test = false     # main.rs startet nur die App
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-serde_json = "1"
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }

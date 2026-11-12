@@ -64,6 +64,10 @@ impl Konto {
         }
     }
 
+    pub fn app_key(&self) -> &str {
+        &self.app_key
+    }
+
     pub fn angemeldet(&self) -> bool {
         self.ablage.lesen().is_some()
     }

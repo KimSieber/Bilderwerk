@@ -23,8 +23,23 @@ import cacheJson from "../tests/vertrag/cache-info.json";
 import vDatenbank from "../tests/vertrag/vorschau-datenbank.json";
 import facettenJson from "../tests/vertrag/facetten.json";
 import detailsJson from "../tests/vertrag/details.json";
+import einstellungenJson from "../tests/vertrag/einstellungen.json";
 import { aufbereiten } from "./detailfelder";
-import type { CacheInfo, DbInfo, Details, DetailFeld, DropboxStatus, Verwandt, Ergebnis, Facette, FacettenWert, Treffer } from "./types";
+import type {
+  CacheInfo,
+  DbInfo,
+  Details,
+  DetailFeld,
+  DropboxStatus,
+  Einstellungen,
+  Verwandt,
+  Ergebnis,
+  Facette,
+  FacettenWert,
+  Regel,
+  Treffer,
+} from "./types";
+import { ANBIETER_ARTEN } from "./types";
 import Facetten from "./components/Facetten";
 import { _zuruecksetzen, anfordern } from "./vorschau";
 import Results from "./components/Results";
@@ -45,6 +60,10 @@ const FACETTENWERT: Record<keyof FacettenWert, true> = { wert: true, anzahl: tru
 const DETAILS: Record<keyof Details, true> = { id: true, pfad: true, felder: true, begriffe: true, duplikate: true };
 const DETAILFELD: Record<keyof DetailFeld, true> = { name: true, wert: true };
 const VERWANDT: Record<keyof Verwandt, true> = { id: true, pfad: true, status: true };
+const EINSTELLUNGEN: Record<keyof Einstellungen, true> = {
+  dbPfad: true, cacheGrenzeMb: true, anbieter: true, dropboxAppKey: true, standardAppKey: true,
+};
+const REGEL: Record<keyof Regel, true> = { pfad: true, art: true };
 const felder = (o: object) => Object.keys(o).sort();
 
 describe("Vertrag", () => {
@@ -104,5 +123,12 @@ describe("Vertrag", () => {
     expect(a.titel).toBe("Strand mit Booten");
     expect(a.chips[0]).toEqual({ titel: "Schlagworte", werte: ["boot", "strand", "meer"] });
     expect(a.gruppen.find((g) => g.titel === "Bildinhalt")?.zeilen[0]).toEqual({ label: "Motiv", wert: "Landschaft" });
+  });
+
+  it("Einstellungen und Regel haben genau die Felder der TS-Typen; Arten bekannt (V-18)", () => {
+    expect(felder(einstellungenJson)).toEqual(felder(EINSTELLUNGEN));
+    expect(felder(einstellungenJson.anbieter[0])).toEqual(felder(REGEL));
+    const arten = ANBIETER_ARTEN.map((a) => a.art);
+    for (const r of einstellungenJson.anbieter) expect(arten).toContain(r.art);
   });
 });

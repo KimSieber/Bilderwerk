@@ -1,5 +1,5 @@
 // Testdaten für Frontend-Tests
-import type { DbInfo, Ergebnis, Facette, Treffer } from "../types";
+import type { DbInfo, Einstellungen, Ergebnis, Facette, Treffer } from "../types";
 
 export function treffer(id: number, t: Partial<Treffer> = {}): Treffer {
   return {
@@ -38,3 +38,15 @@ export const facetten: Facette[] = [
   { feld: "motiv", titel: "Motiv", werte: [{ wert: "Landschaft", anzahl: 12 }, { wert: "Porträt", anzahl: 3 }] },
   { feld: "merkmale", titel: "Merkmale", werte: [{ wert: "brille", anzahl: 2 }] },
 ];
+
+/** Einstellungen wie vom Befehl `einstellungen` (v0.3) */
+export const einstellungen: Einstellungen = {
+  dbPfad: "/Users/kim/Dropbox/Bildkatalog.db",
+  cacheGrenzeMb: 2048,
+  anbieter: [
+    { pfad: "/Users/kim/Dropbox", art: "dropbox-klassisch" },
+    { pfad: "/", art: "lokal" },
+  ],
+  dropboxAppKey: "sm36zb0y3puyff6",
+  standardAppKey: "sm36zb0y3puyff6",
+};

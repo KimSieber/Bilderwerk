@@ -94,11 +94,14 @@ Ziel seit v0.0.3: **jede Funktion und jeder Ablauf hat mindestens einen Test.** 
 
 | ID | Test | Prüft | Seit | Status |
 |---|---|---|---|---|
-| R-EINST-01 | `speichern_und_laden` | Rundlauf; JSON in camelCase (`dbPfad`) | v0.0.3 | ✅ |
+| R-EINST-01 | `speichern_und_laden` | Rundlauf aller Felder (DB, Cache, App-Schlüssel, Regeln); JSON in camelCase | v0.0.3 · v0.3 | ✅ |
 | R-EINST-02 | `fehlende_oder_kaputte_datei` | fehlende/kaputte Datei → Standardwerte, kein Absturz | v0.0.3 | ✅ |
-| R-EINST-03 | `vorschlag_nur_wenn_datei_existiert` | Vorschlag aus `view.local.json` nur, wenn die Datei existiert; gespeicherter Pfad hat Vorrang | v0.0.3 | ✅ |
-| R-EINST-05 | `cache_grenze` | Cache-Obergrenze: Standard 2 GB, eigener Wert, ältere einstellungen.json bleibt lesbar | v0.0.3 | ✅ |
-| R-EINST-04 | `speichern_legt_ordner_an` | Konfigurationsordner wird angelegt; `laden` (mit eingebautem Vorschlag) läuft | v0.0.3 | ✅ |
+| R-EINST-03 | `alte_datei_und_standards` | einstellungen.json aus v0.2 (nur `dbPfad`/`cacheGrenzeMb`) bleibt lesbar; Standards: mitgelieferter App-Schlüssel, Regel `/` → `lokal`, 2048 MB (bis v0.2: `vorschlag_nur_wenn_datei_existiert`, entfällt mit `view.local.json`) | v0.3 | ✅ |
+| R-EINST-05 | `cache_grenze` | Cache-Obergrenze: Standard 2 GB, eigener Wert | v0.0.3 | ✅ |
+| R-EINST-04 | `speichern_legt_ordner_an` | Konfigurationsordner wird angelegt | v0.0.3 | ✅ |
+| R-EINST-06 | `app_key` | App-Schlüssel: fehlt → Standard, eigener (getrimmt), leer → keine Dropbox-API | v0.3 | ✅ |
+| R-EINST-07 | `aendern_speichert` | Änderung aus dem Dialog: Regeln geprüft und normalisiert, DB-Pfad bleibt, Standard-Schlüssel nicht festgeschrieben, leer = aus | v0.3 | ✅ |
+| R-EINST-08 | `aendern_fehler` | relativer Pfad, Sonderzeichen im Schlüssel, Cache < 100 MB → Meldung, Datei unverändert | v0.3 | ✅ |
 
 ### 3.4a Rust – Speicheranbieter (`speicher/`)
 
@@ -115,15 +118,16 @@ Ziel seit v0.0.3: **jede Funktion und jeder Ablauf hat mindestens einen Test.** 
 
 | ID | Test | Prüft | Seit | Status |
 |---|---|---|---|---|
-| R-ZUO-01 | `regeln_lesen_gueltig` | `anbieter` aus view.local.json; abschließendes `/` entfernt | v0.0.3 | ✅ |
-| R-ZUO-02 | `regeln_lesen_fehler` | kaputtes JSON, unbekannte Art, relativer Pfad, fehlende Art → verständliche Meldung | v0.0.3 | ✅ |
+| R-ZUO-01 | `regeln_pruefen_gueltig` | gültige Regeln; abschließendes `/` und Leerzeichen entfernt; leere Liste erlaubt | v0.0.3 · v0.3 | ✅ |
+| R-ZUO-02 | `regeln_pruefen_fehler` | unbekannte Art, relativer/leerer Pfad, Ordner doppelt → verständliche Meldung | v0.0.3 · v0.3 | ✅ |
 | R-ZUO-03 | `laengster_praefix_gewinnt` | längster passender Ordner gewinnt (Unterordner-Ausnahme) | v0.0.3 | ✅ |
 | R-ZUO-04 | `nur_ganze_ordnernamen` | `/…/Dropbox` passt nicht auf `/…/Dropbox (Firma)` oder `/…/Dropbox2` | v0.0.3 | ✅ |
 | R-ZUO-05 | `ohne_passende_regel_lokal` | ohne Regel → `lokal` | v0.0.3 | ✅ |
 | R-ZUO-06 | `pdf_seite_nach_datei` | `…pdf#seite=N` wird nach der Datei zugeordnet | v0.0.3 | ✅ |
 | R-ZUO-07 | `dropbox_pfad_umsetzen` | `/Users/kim/Dropbox/Archiv/x.jpg` → `/Archiv/x.jpg`; PDF-Seite → Datei; fremde Pfade → keiner | v0.0.3 | ✅ |
 | R-ZUO-08 | `verteiler_liefert_anbieter` | Verteiler liefert je Pfad den Anbieter (inkl. `dropbox-klassisch`, PDF-Seiten) | v0.0.3 | ✅ |
-| R-ZUO-09 | `aus_konfiguration` | ohne Konfiguration alles `lokal`; kaputte Konfiguration → Fehlermeldung + Rückfall `lokal` | v0.0.3 | ✅ |
+| R-ZUO-09 | `aus_regeln` | Verteiler aus den Regeln der Einstellungen; ungültige Regeln → Fehlermeldung + Rückfall `lokal` | v0.3 | ✅ |
+| R-ZUO-10 | `vorschlaege_erkannter_ordner` | Vorschläge: `~/Dropbox` (klassisch, als Verknüpfung `file-provider`), `~/Library/CloudStorage/*`, iCloud, immer `/` → `lokal` | v0.3 | ✅ |
 
 ### 3.4c Rust – Dropbox (`speicher/dropbox/`)
 
@@ -153,6 +157,7 @@ Alle Tests laufen gegen einen nachgebildeten Server (`Server::starte` in `dropbo
 | R-DBX-20 | `original_bereitstellen` | nur online → Download mit Originalnamen; lokal → Datei selbst; nicht angemeldet → Hinweis | v0.0.3 | ✅ |
 | R-DBX-21 | `heic_ueber_vorschau_api` | HEIC-Vorschau direkt von Dropbox – kein Download des Originals | v0.0.5 | ✅ |
 | R-DBX-22 | `vorschau_endungen` | HEIC/HEIF gehören zu den API-Endungen, PDF nicht | v0.0.5 | ✅ |
+| R-DBX-23 | `speicher_neu_aufbauen` | Speicher neu aufbauen (Einstellungsdialog): gleicher Schlüssel behält Konto und Anmeldung, anderer meldet das alte Konto ab (Token widerrufen), leer → kein Konto, ungültige Regeln → alles `lokal`, Standard-Schlüssel ohne Eintrag | v0.3 | ✅ |
 
 ### 3.4d Rust – Cache und DB-Vorschauen (`cache.rs`, `vorschau_db.rs`)
 
@@ -231,7 +236,7 @@ Alle Tests laufen gegen einen nachgebildeten Server (`Server::starte` in `dropbo
 | I-FAC-06 | `gewaehlter_wert_ohne_treffer_bleibt_sichtbar` | gewählter Wert mit 0 Treffern bleibt in der Liste | v0.0.5 | ✅ |
 | I-FAC-07 | `aeltere_db_ohne_kategorie_spalten` | älterer Katalog: nur Merkmale/Schlagworte; Auswahl einer fehlenden Spalte → 0 Treffer statt SQL-Fehler | v0.0.5 | ✅ |
 | I-ABL-01 | `start_ohne_einstellung` | Ablauf `start` ohne DB → Meldung „Noch keine Datenbank“ | v0.0.3 | ✅ |
-| I-ABL-02 | `start_mit_vorschlag` | Vorschlag aus `view.local.json` wird geöffnet, aber nicht gespeichert | v0.0.3 | ✅ |
+| I-ABL-02 | `start_ohne_vorschlag` | kein eingebauter DB-Vorschlag mehr: ohne Einstellung immer die Auswahl, nichts gespeichert | v0.3 | ✅ |
 | I-ABL-03 | `db_setzen_speichert_und_start_nutzt` | `db_setzen` speichert; nächster `start` öffnet sie | v0.0.3 | ✅ |
 | I-ABL-04 | `ungueltige_db_aendert_nichts` | ungültige Wahl → Fehler, alte Einstellung bleibt | v0.0.3 | ✅ |
 | I-ABL-05 | `start_mit_verschwundener_db` | gespeicherte DB fehlt → Meldung (Oberfläche zeigt Auswahl) | v0.0.3 | ✅ |
@@ -275,6 +280,7 @@ Alle Tests laufen gegen einen nachgebildeten Server (`Server::starte` in `dropbo
 | F-LOG-27 | `detailfelder.test.ts` | Formate: Datum mit Uhrzeit, Änderungszeit in Ortszeit, Belichtung als Bruch, GPS mit Himmelsrichtung, Listen aus JSON/Text | v0.0.6 | ✅ |
 | F-LOG-29 | `teiler.test.ts` | Detailbreite: Ergebnis-Minimum (eine Kachel in aktueller Größe, mind. Kopfzeile 250 px; Liste 420 px), Begrenzung nach unten/oben, schmales Fenster | v0.0.6 | ✅ |
 | F-LOG-30 | `api.test.ts` | `api.dbNeuLaden` → `db_neu_laden` | v0.0.7 | ✅ |
+| F-LOG-31 | `api.test.ts` | `api.einstellungen`, `einstellungenSetzen` (Argument `aenderung`), `anbieterVorschlaege` | v0.3 | ✅ |
 | F-LOG-28 | `detailfelder.test.ts` | `aufbereiten`: Kopf, Gruppen Aufnahme/Bildinhalt/Datei/Text/Metadaten, Analyse und „Alle Metadaten“ zugeklappt, Chips (Begriffe vor Spalte), unbekannte Spalten unter „Weitere“, nichts doppelt, leere Gruppen entfallen | v0.0.6 | ✅ |
 | F-UI-01 … 09 | `SearchPanel.test.tsx` | Fokus beim Start · Kriterien auf/zu · alle Felder · Dateityp-Gruppen · Zähler · × leert (Duplikate bleiben) · Esc · ⌘F · kompakt | v0.0.3 | ✅ |
 | F-UI-10 … 13 | `DbMenu.test.tsx` | Anzeige Bilder/Duplikate/Stand/Pfad · „unbekannt“ · DB-Wechsel · Klick außerhalb schließt | v0.0.3 | ✅ |
@@ -283,9 +289,9 @@ Alle Tests laufen gegen einen nachgebildeten Server (`Server::starte` in `dropbo
 | F-UI-22 … 24 | `Ergebnisansicht.test.tsx` | Raster: Titel/Rückfall Dateiname, Datum, Seite · Klick und Markierung · Spaltenzahl aus Breite, Tastatur, Sichtbarhalten | v0.0.3 | ✅ |
 | F-UI-25 … 26 | `Ergebnisansicht.test.tsx` | Liste: Zeileninhalt · Klick, ↓, Sichtbarhalten | v0.0.3 | ✅ |
 | F-UI-40 | `DbMenu.test.tsx` | Zeile „Vorschauen in der DB“: Anzahl bzw. „keine“ | v0.0.3 | ✅ |
-| F-UI-41 … 43 | `DbMenu.cache.test.tsx` | Cache-Größe · „Cache leeren“ (0 B, alle neu laden, Knopf aus) · Größe nicht abfragbar → Bereich weg | v0.0.3 | ✅ |
+| F-UI-41 … 43 | `EinstellungenDialog.cache.test.tsx` | Cache-Größe · „Cache leeren“ (0 B, alle neu laden, Knopf aus) · Größe nicht abfragbar → Anzeige weg (seit v0.3 im Einstellungsdialog, vorher DB-Menü) | v0.0.3 · v0.3 | ✅ |
 | F-UI-44 | `App.test.tsx` | Ereignis „cache-geleert“ (App-Menü) lädt alle Vorschauen neu; Abmelden beim Schließen | v0.0.3 | ✅ |
-| F-UI-35 … 39 | `DbMenu.dropbox.test.tsx` | Dropbox-Bereich: ohne App-Schlüssel unsichtbar · Anmelden (Warten, danach Wolken neu laden) · Abmelden · Fehlermeldung · Status nicht abfragbar | v0.0.3 | ✅ |
+| F-UI-35 … 39 | `EinstellungenDialog.dropbox.test.tsx` | Dropbox: ohne App-Schlüssel keine Anmeldung · Anmelden (Warten, danach Wolken neu laden) · Abmelden · Fehlermeldung · Status nicht abfragbar (seit v0.3 im Einstellungsdialog, vorher DB-Menü) | v0.0.3 · v0.3 | ✅ |
 | F-UI-27 … 34 | `App.test.tsx` | ohne DB → Auswahl → bereit · Auswahl abgebrochen · ungültige DB · verzögerte Suche · nur jüngste Antwort zählt · Suchfehler · Leeren → Startfläche · DB-Wechsel über Menü | v0.0.3 | ✅ |
 | F-UI-45 … 49 | `Facetten.test.tsx` | kompakte Leiste: ein Knopf je Facette, Werte mit Anzahl (Tausenderpunkt) erst nach Klick, nur eine Facette offen · Klick wählt/entfernt, Knopf zeigt Anzahl gewählter Werte, andere Auswahl bleibt · gewählter Wert mit 0 sichtbar und gedämpft · lange Listen: erste 12 + „weitere“/„weniger“, gewählte immer sichtbar · Facetten ohne Werte ausgeblendet | v0.0.5 | ✅ |
 | F-UI-54 | `Facetten.test.tsx` | gewählte Werte als entfernbare Chips in der Leiste; Esc und Klick außerhalb schließen den Aufklapper | v0.0.5 | ✅ |
@@ -303,6 +309,15 @@ Alle Tests laufen gegen einen nachgebildeten Server (`Server::starte` in `dropbo
 | F-UI-80 | `App.test.tsx` | Programmname „Bilderwerk View“ in Titelleiste und DB-Auswahl | v0.0.7 | ✅ |
 | F-UI-81 | `DbMenu.neu.test.tsx` | DB-Menü „Neu laden“ ruft `db_neu_laden`, Fehler sichtbar | v0.0.7 | ✅ |
 | F-UI-82 … 83 | `Detailbereich.test.tsx` | Tastenkürzel ⌘O Öffnen, ⌥⌘R Im Finder, ⇧⌘S Sichern unter (ohne ⌘ nichts) · neuer DB-Stand holt die Angaben neu | v0.0.7 | ✅ |
+| F-UI-84 | `DbMenu.test.tsx` | „Einstellungen…“ schließt das DB-Menü und öffnet den Dialog | v0.3 | ✅ |
+| F-UI-85 | `EinstellungenDialog.test.tsx` | Dialog zeigt DB, Cache-Grenze, Regeln, App-Schlüssel; „Übernehmen“ erst nach Änderung, „Schließen“/„Abbrechen“; DB-Wechsel; ohne DB Hinweis | v0.3 | ✅ |
+| F-UI-86 | `EinstellungenDialog.test.tsx` | Regel hinzufügen, Ordner wählen (Abbruch ändert nichts), Art ändern, entfernen → `einstellungen_setzen` mit genau diesen Regeln, „Übernommen“ | v0.3 | ✅ |
+| F-UI-87 | `EinstellungenDialog.test.tsx` | „Erkannte Ordner vorschlagen“ ergänzt nur neue Ordner | v0.3 | ✅ |
+| F-UI-88 | `EinstellungenDialog.test.tsx` | ungültige Cache-Grenze wird nicht gesendet; Fehler aus Rust sichtbar, Knopf bleibt aktiv | v0.3 | ✅ |
+| F-UI-89 | `EinstellungenDialog.dropbox.test.tsx` | geänderter Schlüssel: Anmelden erst nach „Übernehmen“; „Standard“ setzt den mitgelieferten Schlüssel; leerer Schlüssel bei Dropbox-Regel → Hinweis | v0.3 | ✅ |
+| F-UI-90 | `EinstellungenDialog.test.tsx` | Esc und Klick auf den Hintergrund schließen; andere Tastenhörer (Raster, Suchfeld) merken nichts, nach dem Schließen wieder | v0.3 | ✅ |
+| F-UI-91 | `Ueber.test.tsx` | Über-Fenster: Version, Copyright, Lizenz mit Ausnahme der Icons; Webseite, E-Mail, Lizenz öffnen über `openUrl` | v0.3 | ✅ |
+| F-UI-92 | `App.test.tsx` | Ereignis „einstellungen-oeffnen“ (App-Menü ⌘,) öffnet den Dialog, „speicher-neu“ lädt Vorschauen neu; ohne DB „Einstellungen…“ auf der Startfläche | v0.3 | ✅ |
 | F-UI-70 | `Ergebnisansicht.test.tsx` | `Results` meldet seine Mindestbreite (Kachel bzw. Liste), auch nach Kachelgröße/Ansicht ändern | v0.0.6 | ✅ |
 
 ### 3.8 Vertrag Rust ↔ Frontend
@@ -325,13 +340,15 @@ Alle Tests laufen gegen einen nachgebildeten Server (`Server::starte` in `dropbo
 | V-14 | `vertrag.test.ts` | Facette/FacettenWert haben genau die Felder der TS-Typen; echte Antwort wird angezeigt | v0.0.5 | ✅ |
 | V-15 | `vertrag.rs` | erzeugt `details.json` (Duplikat 3 mit Original und Schlagworten) | v0.0.6 | ✅ |
 | V-16 | `vertrag.test.ts` | Details/DetailFeld/Verwandt haben genau die Felder der TS-Typen; echte Antwort lässt sich aufbereiten | v0.0.6 | ✅ |
+| V-17 | `vertrag.rs` | erzeugt `einstellungen.json` (Ansicht der Einstellungen mit Regeln und Standard-Schlüssel) | v0.3 | ✅ |
+| V-18 | `vertrag.test.ts` | Einstellungen/Regel haben genau die Felder der TS-Typen; Arten der Regeln sind in `ANBIETER_ARTEN` | v0.3 | ✅ |
 
 ### 3.9 Bewusst ohne automatischen Test
 
 | Teil | Grund | Abdeckung stattdessen |
 |---|---|---|
-| Tauri-Befehle in `lib.rs` (`start`, `db_setzen`, `db_neu_laden`, Hintergrund-Thread `beobachten`, Menü „Katalog“, `suchen`, `facetten`, `vorschau`, `details`, `vorschau_gross`, `original_oeffnen`, `im_finder_zeigen`, `dateiname_vorschlag`, `sichern_unter`, `teilen`, `dropbox_*`, `cache_info`, `cache_leeren`), Protokoll `vorschau://`, App-Menü, Cache-Begrenzung beim Start | brauchen ein laufendes Tauri | nur noch Durchreichen; Logik in `ablauf.rs`, `search.rs`, `facetten.rs`, `details.rs`, `gross.rs`, `aktionen.rs`, `speicher/`, `thumbs.rs` getestet (I-ABL, I-SUCH, I-DET, R-GROSS, R-AKT, R-ANB, R-ZUO, I-VOR) |
-| `build.rs` – `anbieter` aus view.local.json | Build-Skript | Regeln werden beim Start geprüft (R-ZUO-02/09); Fehler → Meldung im Terminal, alles `lokal` |
+| Tauri-Befehle in `lib.rs` (`start`, `db_setzen`, `db_neu_laden`, Hintergrund-Thread `beobachten`, Menü „Katalog“, `suchen`, `facetten`, `vorschau`, `details`, `vorschau_gross`, `original_oeffnen`, `im_finder_zeigen`, `dateiname_vorschlag`, `sichern_unter`, `teilen`, `dropbox_*`, `cache_info`, `cache_leeren`, `einstellungen`, `einstellungen_setzen`, `anbieter_vorschlaege`), Fenster „Über“, Menü „Einstellungen…“, Protokoll `vorschau://`, App-Menü, Cache-Begrenzung beim Start | brauchen ein laufendes Tauri | nur noch Durchreichen; Logik in `ablauf.rs`, `search.rs`, `facetten.rs`, `details.rs`, `gross.rs`, `aktionen.rs`, `speicher/`, `thumbs.rs` getestet (I-ABL, I-SUCH, I-DET, R-GROSS, R-AKT, R-ANB, R-ZUO, I-VOR) |
+| Neuaufbau im `AppState` (`RwLock`) beim Übernehmen | braucht ein laufendes Tauri | Logik in `Speicher::aufbauen` (R-DBX-23), `settings::aendern` (R-EINST-07/08); Wirkung manuell (Abschnitt 5, v0.3) |
 | `main.rs`, `main.tsx`, `build.rs` | Programmstart bzw. Build | manueller Start je Version |
 | `pdf.rs` (PDFKit) | nur macOS | I-VOR-03 auf dem Mac; unter Linux nur Typprüfung für macOS |
 | `token::Schluesselbund` (macOS-Schlüsselbund) | würde Kims echten Schlüsselbund verändern | Tests nutzen `ImSpeicher`; manuelle Prüfung Anmelden/Abmelden |
@@ -464,3 +481,20 @@ Offen – Prüfung durch Kim auf dem Mac.
 | 6 | Bau: `npm run bauen` → `.app` und `.dmg` entstehen; `.app` startet aus `/Programme`, findet die DB, Dropbox-Anmeldung bleibt | ⏳ |
 | 7 | Installation auf dem Mac mini M1 aus dem `.dmg`: Start, DB, Vorschauen | ⏳ |
 
+### v0.3.1
+
+Offen – Prüfung durch Kim auf dem Mac.
+
+| # | Prüfung | Ergebnis |
+|---|---|---|
+| 1 | `npm test` grün (Rust 154 inkl. 7 macOS-Tests, Frontend 157, tsc) | ⏳ |
+| 2 | Neu bauen ohne `view.local.json` (Datei darf liegen bleiben, wird nicht mehr gelesen): Start öffnet die bisherige DB | ⏳ |
+| 3 | **Einmalig einrichten** (⌘, oder DB-Menü → „Einstellungen…“): Regeln `/Users/kim/Dropbox` → Dropbox (klassisch), `/Users/kim/Library/Mobile Documents` → Cloud (falls genutzt), `/` → Lokal; „Übernehmen“. App-Schlüssel steht schon (Standard). Dropbox weiter „angemeldet“ | ⏳ |
+| 4 | „Nur online“-Bild in Dropbox zeigt Vorschau; Regel auf „Lokal“ stellen → nach „Übernehmen“ ohne Neustart Wolke; zurückstellen → Vorschau wieder da | ⏳ |
+| 5 | App-Schlüssel leeren → Hinweis, „Übernehmen“: keine Anmeldung mehr angeboten, Dropbox-Ordner wie lokal; „Standard“ → „Übernehmen“ → neu anmelden nötig (Token gehört zur App) | ⏳ |
+| 6 | „Erkannte Ordner vorschlagen“ zeigt Dropbox und iCloud; Ordner-Knopf öffnet die Ordnerwahl | ⏳ |
+| 7 | Cache-Grenze ändern (z. B. 500 MB) → „Übernehmen“: Cache wird sofort begrenzt (Anzeige „belegt …“) | ⏳ |
+| 8 | Esc schließt den Dialog, ohne die Auswahl/Suche zu verändern; Tippen in den Feldern bewegt nicht die Auswahl | ⏳ |
+| 9 | App-Menü „Über Bilderwerk View“: eigenes Fenster mit Symbol, Version 0.3.1, Links öffnen Browser bzw. Mail; erneuter Aufruf holt das Fenster nach vorn | ⏳ |
+| 10 | Mac mini: frische Installation ohne einstellungen.json → DB wählen, Regeln über „Erkannte Ordner vorschlagen“ | ⏳ |
+| 11 | hell und dunkel (Dialog, Über-Fenster) | ⏳ |

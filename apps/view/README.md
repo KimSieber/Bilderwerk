@@ -20,9 +20,6 @@ Vorschaubilder nutzen nur macOS-Bordmittel (`sips`, PDFKit) – keine zusätzlic
 
 ### Ordner in Dropbox
 
-Lokale Werte: `view.local.example.json` nach `view.local.json` kopieren und anpassen (nicht im Repo):
-`standardDb` (DB-Vorschlag), `dropboxAppKey` (Dropbox-App), `anbieter` (Speicheranbieter je Pfad). Nach Änderungen neu bauen.
-
 `node_modules/` und `src-tauri/target/` von der Dropbox-Synchronisierung ausschließen:
 
 ```bash
@@ -37,21 +34,34 @@ xattr -w com.dropbox.ignored 1 apps/view/src-tauri/target
 | `src-tauri/src/search.rs` | Suchkern: Filter → SQL (FTS5-Trigram + Bedingungen) |
 | `src-tauri/src/facetten.rs` | Facetten mit Anzahl (Motiv, Bildart, Farbgebung, Ausrichtung, Jahreszeit, Wetter, Merkmale, Schlagworte) |
 | `src-tauri/src/db.rs` | DB öffnen (`mode=ro&immutable=1`), DB-Info |
-| `src-tauri/src/settings.rs` | Einstellungen pro Rechner (DB-Pfad) |
+| `src-tauri/src/settings.rs` | Einstellungen pro Rechner: DB-Pfad, Cache-Grenze, Speicheranbieter-Regeln, Dropbox-App-Schlüssel |
 | `src-tauri/src/thumbs.rs` | Vorschaubilder (sips, PDF über `pdf.rs`/PDFKit), Nur-online-Erkennung |
 | `src-tauri/src/speicher/` | Speicheranbieter `lokal` · `file-provider` · `dropbox-klassisch` (Dropbox-API), Zuordnung nach Pfad |
 | `src-tauri/src/vorschau_db.rs` | Vorschauen aus der Katalog-DB (Tabelle `vorschauen`, falls vorhanden) |
 | `src-tauri/src/cache.rs` | Vorschau-Cache: Größe, Leeren, Obergrenze (Standard 2 GB) |
 | `src-tauri/src/details.rs` · `gross.rs` · `aktionen.rs` · `teilen.rs` | Detailbereich (alle DB-Angaben), große Fassung für die Großansicht, Öffnen/Finder/Sichern, macOS-Teilen |
 | `src-tauri/src/beobachter.rs` | erkennt, wenn Dropbox die DB-Sicherung ersetzt → neu laden |
-| `src-tauri/src/lib.rs` | Tauri-Befehle (`start`, `db_setzen`, `db_neu_laden`, `suchen`, `facetten`, `vorschau`, `details`, `vorschau_gross`, Aktionen, Dropbox, Cache), App-Menü „Katalog“ |
+| `src-tauri/src/lib.rs` | Tauri-Befehle (`start`, `db_setzen`, `db_neu_laden`, `suchen`, `facetten`, `vorschau`, `details`, `vorschau_gross`, Aktionen, Dropbox, Cache, `einstellungen*`), App-Menü (Über-Fenster, Einstellungen ⌘,, „Katalog“) |
 | `docs/Technologie- und Architekturkonzept.md` | Technologie- und Architekturkonzept |
 | `docs/Testdokumentation.md` | Testfallkatalog, manuelle Prüfungen je Version |
 | `src-tauri/tests/` | Rust-Integrationstests, Test-DB (`gemeinsam/`), Testbilder (`daten/`) |
 | `tests/vertrag/` | JSON-Antworten aus Rust, die die Frontend-Tests als Mock nutzen |
 | `src/` | React-Oberfläche |
 
-Einstellungen: `~/Library/Application Support/de.sieber-bw.bilderwerk.view/einstellungen.json`
+Einstellungen: `~/Library/Application Support/de.sieber-bw.bilderwerk.view/einstellungen.json` – alles im
+Einstellungsdialog der App (⌘,), nichts wird mehr beim Bau eingebaut (bis v0.2: `view.local.json`).
+
+| Einstellung | Standard |
+|---|---|
+| Datenbank | Auswahl beim ersten Start |
+| Vorschau-Cache | höchstens 2048 MB |
+| Speicherorte | `/` → Lokal; Vorschläge für `~/Dropbox`, `~/Library/CloudStorage/…`, iCloud per Knopf |
+| Dropbox-App-Schlüssel | mitgelieferte App „Bilderwerk View“ (öffentlich, PKCE); leer = ohne Dropbox-API |
+
+Die Dropbox-App ist im Entwicklungsstatus: Andere Konten müssen in der App-Console unter „Enable additional users“
+zugelassen sein; ab 50 verbundenen Konten bleiben zwei Wochen für „Produktion beantragen“, sonst können sich keine
+neuen Konten mehr verbinden (bestehende bleiben). Wer eine eigene Dropbox-App nutzt, trägt deren Schlüssel ein und
+hinterlegt dort als Redirect-URI `http://127.0.0.1:53682/psv-anmeldung`.
 
 ## Installationsdatei bauen
 
@@ -66,9 +76,8 @@ Ergebnis:
 - `apps/view/src-tauri/target/release/bundle/dmg/Bilderwerk View_<Version>_aarch64.dmg`
 
 Hinweise:
-- **Werte aus `view.local.json` werden eingebaut** (Vorschlag für die DB, Speicheranbieter, Dropbox-App-Schlüssel).
-  Die gewählte DB merkt sich jeder Mac selbst (`einstellungen.json`). Die Pfade in `anbieter` müssen auf dem Ziel-Mac
-  stimmen. Bei gleichem Benutzer und gleichem Dropbox-Ort ist das der Fall.
+- **Nichts Rechnerabhängiges wird eingebaut** (seit v0.3). Jeder Mac hat eigene Einstellungen (DB, Speicherorte,
+  Dropbox) – auf einem neuen Mac einmal im Einstellungsdialog einrichten.
 - **Signatur:** festes „Apple Development“-Zertifikat (`bundle.macOS.signingIdentity`), keine Notarisierung.
   Auf den eigenen Macs reicht das. Blockiert macOS den ersten Start, im Finder Rechtsklick → „Öffnen“.
 - Das `.dmg`-Fenster gestaltet `tauri build` per AppleScript: Beim ersten Bau fragt macOS evtl., ob das Terminal

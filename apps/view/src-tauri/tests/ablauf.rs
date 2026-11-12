@@ -7,19 +7,17 @@ use bilderwerk_view_lib::{ablauf, settings};
 #[test]
 fn start_ohne_einstellung() {
     let d = tmp("abl-leer");
-    let e = ablauf::start(&d.join("konfig"), None).err().unwrap();
+    let e = ablauf::start(&d.join("konfig")).err().unwrap();
     assert!(e.contains("Noch keine Datenbank"), "{e}");
 }
 
-/// I-ABL-02
+/// I-ABL-02 (v0.3): kein eingebauter DB-Vorschlag mehr – ohne Einstellung immer die Auswahl
 #[test]
-fn start_mit_vorschlag() {
+fn start_ohne_vorschlag() {
     let d = tmp("abl-vorschlag");
-    let p = test_db(&d, "k.db");
-    let (pfad, _, info) = ablauf::start(&d.join("konfig"), p.to_str()).unwrap();
-    assert_eq!(pfad, p.to_str().unwrap());
-    assert_eq!(info.bilder, 28);
-    assert!(!d.join("konfig").exists(), "Vorschlag wird nicht gespeichert");
+    test_db(&d, "k.db");
+    assert!(ablauf::start(&d.join("konfig")).is_err());
+    assert!(!d.join("konfig").exists(), "nichts gespeichert");
 }
 
 /// I-ABL-03
@@ -29,8 +27,8 @@ fn db_setzen_speichert_und_start_nutzt() {
     let k = d.join("konfig");
     let p = test_db(&d, "k.db");
     ablauf::db_setzen(&k, p.to_str().unwrap()).unwrap();
-    assert_eq!(settings::laden_mit(&k, None).db_pfad.as_deref(), p.to_str());
-    assert!(ablauf::start(&k, None).is_ok());
+    assert_eq!(settings::laden(&k).db_pfad.as_deref(), p.to_str());
+    assert!(ablauf::start(&k).is_ok());
 }
 
 /// I-ABL-04
@@ -41,7 +39,7 @@ fn ungueltige_db_aendert_nichts() {
     let p = test_db(&d, "k.db");
     ablauf::db_setzen(&k, p.to_str().unwrap()).unwrap();
     assert!(ablauf::db_setzen(&k, "/gibt/es/nicht.db").is_err());
-    assert_eq!(settings::laden_mit(&k, None).db_pfad.as_deref(), p.to_str(), "alte Wahl bleibt");
+    assert_eq!(settings::laden(&k).db_pfad.as_deref(), p.to_str(), "alte Wahl bleibt");
 }
 
 /// I-ABL-05
@@ -50,7 +48,7 @@ fn start_mit_verschwundener_db() {
     let d = tmp("abl-weg");
     let k = d.join("konfig");
     settings::speichern(&k, &settings::Einstellungen { db_pfad: Some("/weg/k.db".into()), ..Default::default() }).unwrap();
-    let e = ablauf::start(&k, None).err().unwrap();
+    let e = ablauf::start(&k).err().unwrap();
     assert!(e.contains("nicht gefunden"), "{e}");
 }
 

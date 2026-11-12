@@ -112,3 +112,19 @@ fn details() {
     assert_eq!(x.duplikate.len(), 1);
     schreiben("details.json", &x);
 }
+
+/// V-17 (v0.3): Einstellungen für den Dialog (Befehle `einstellungen`, `einstellungen_setzen`)
+#[test]
+fn einstellungen() {
+    use bilderwerk_view_lib::{settings::Einstellungen, speicher::Regel};
+    let e = Einstellungen {
+        db_pfad: Some("/Users/test/Bildkatalog.db".into()),
+        cache_grenze_mb: Some(1024),
+        dropbox_app_key: None,
+        anbieter: Some(vec![
+            Regel { pfad: "/Users/test/Dropbox".into(), art: "dropbox-klassisch".into() },
+            Regel { pfad: "/".into(), art: "lokal".into() },
+        ]),
+    };
+    schreiben("einstellungen.json", &e.ansicht());
+}

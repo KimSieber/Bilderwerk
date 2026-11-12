@@ -46,7 +46,7 @@ apps/view/docs/intern/
 docs/intern/
 # Webseite bilderwerk.sieber-bw.de – nicht im Repo
 /Webseite/
-# lokale Pfade (DB-Sicherung usw.) – Vorlage: view.local.example.json
+# bis v0.2: eingebaute Werte für View (seit v0.3 im Einstellungsdialog) – alte Datei kann weg
 view.local.json
 .env
 .env.*

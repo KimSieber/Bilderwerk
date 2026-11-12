@@ -18,7 +18,7 @@ describe("DbMenu Neu laden (F-UI-81)", () => {
   it("ruft db_neu_laden; Fehler wird angezeigt", async () => {
     const a = vi.mocked(api);
     a.dbNeuLaden.mockResolvedValueOnce(info).mockRejectedValueOnce("Datei nicht gefunden: /x.db");
-    render(<DbMenu info={info} onWechseln={vi.fn()} />);
+    render(<DbMenu info={info} onWechseln={vi.fn()} onEinstellungen={vi.fn()} />);
     await userEvent.click(screen.getByTitle("Datenbank"));
     await userEvent.click(screen.getByText("Neu laden"));
     expect(a.dbNeuLaden).toHaveBeenCalledOnce();

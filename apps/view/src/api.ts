@@ -1,5 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CacheInfo, DbInfo, Details, DropboxStatus, Ergebnis, Facette, SuchFilter } from "./types";
+import type {
+  CacheInfo,
+  DbInfo,
+  Details,
+  DropboxStatus,
+  Einstellungen,
+  EinstellungenAenderung,
+  Ergebnis,
+  Facette,
+  Regel,
+  SuchFilter,
+} from "./types";
 import type { Antwort } from "./vorschau";
 
 export const api = {
@@ -14,6 +25,10 @@ export const api = {
   dropboxAbmelden: () => invoke<DropboxStatus>("dropbox_abmelden"),
   cacheInfo: () => invoke<CacheInfo>("cache_info"),
   cacheLeeren: () => invoke<CacheInfo>("cache_leeren"),
+  // Einstellungsdialog (v0.3)
+  einstellungen: () => invoke<Einstellungen>("einstellungen"),
+  einstellungenSetzen: (aenderung: EinstellungenAenderung) => invoke<Einstellungen>("einstellungen_setzen", { aenderung }),
+  anbieterVorschlaege: () => invoke<Regel[]>("anbieter_vorschlaege"),
   // Detailbereich (v0.0.6)
   details: (id: number) => invoke<Details>("details", { id }),
   vorschauGross: (pfad: string) => invoke<Antwort>("vorschau_gross", { pfad }),

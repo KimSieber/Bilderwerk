@@ -13,6 +13,7 @@ vi.mock("./api", async (orig) => ({
     cacheInfo: vi.fn().mockResolvedValue({ bytes: 0, dateien: 0 }),
     details: vi.fn(),
     vorschauGross: vi.fn(),
+    einstellungen: vi.fn(),
   },
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
@@ -33,7 +34,7 @@ vi.mock("./components/Vorschaubild", () => ({ default: () => null }));
 import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "./api";
 import App from "./App";
-import { ergebnis, facetten, info } from "./test/daten";
+import { einstellungen, ergebnis, facetten, info } from "./test/daten";
 
 const a = vi.mocked(api);
 beforeEach(() => {
@@ -137,6 +138,28 @@ describe("App", () => {
     expect(alleNeuLaden).toHaveBeenCalledOnce();
     unmount();
     expect(hoerer.has("cache-geleert")).toBe(false);
+  });
+
+  it("Einstellungen: App-Menü (⌘,) öffnet den Dialog, neue Speicherorte laden Vorschauen neu (F-UI-92)", async () => {
+    a.einstellungen.mockResolvedValue(einstellungen);
+    render(<App />);
+    await suchfeld();
+    await waitFor(() => expect(hoerer.has("einstellungen-oeffnen")).toBe(true));
+    act(() => hoerer.get("einstellungen-oeffnen")!());
+    expect(await screen.findByRole("dialog", { name: "Einstellungen" })).toBeInTheDocument();
+    expect(screen.getByText(info.pfad)).toBeInTheDocument();
+    await userEvent.click(screen.getByText("Schließen"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    hoerer.get("speicher-neu")!();
+    expect(alleNeuLaden).toHaveBeenCalledOnce();
+  });
+
+  it("ohne DB: „Einstellungen…“ auf der Startfläche (F-UI-92)", async () => {
+    a.start.mockRejectedValue("Noch keine Datenbank ausgewählt.");
+    a.einstellungen.mockResolvedValue({ ...einstellungen, dbPfad: null });
+    render(<App />);
+    await userEvent.click(await screen.findByText("Einstellungen…"));
+    expect(await screen.findByText("Noch keine Datenbank ausgewählt.", { selector: ".dialog__pfad" })).toBeInTheDocument();
   });
 
   it("Facetten werden auch ohne Suche geladen; Auswahl startet die Suche (F-UI-51)", async () => {

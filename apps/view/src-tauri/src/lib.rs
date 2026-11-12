@@ -17,7 +17,7 @@ pub mod vorschau_db;
 
 use rusqlite::Connection;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use tauri::{Emitter, Manager, State};
 
 /// Geöffnete Datenbank (nur lesend) samt Pfad.
@@ -31,16 +31,24 @@ struct AppState {
     beobachter: Mutex<beobachter::Beobachter>,
     /// Ordner der großen Vorschauen (…/Caches/…/gross) – nicht Teil des Vorschau-Caches, beim Start geleert
     gross: PathBuf,
-    /// Pfad → Speicheranbieter, nach view.local.json "anbieter"; beim Start angelegt
-    verteiler: Arc<speicher::Verteiler>,
-    /// Dropbox-Konto – nur, wenn in view.local.json ein App-Schlüssel steht
-    dropbox: Option<Arc<speicher::Konto>>,
+    /// Pfad → Speicheranbieter und Dropbox-Konto nach den Einstellungen – beim Speichern im
+    /// Einstellungsdialog neu aufgebaut (v0.3), laufende Vorschauen behalten ihren Stand
+    speicher: RwLock<speicher::Speicher>,
 }
 
-/// Regeln aus view.local.json (build.rs), sonst None → alles lokal
-const ANBIETER: Option<&str> = option_env!("PSV_ANBIETER");
-/// App-Schlüssel der Dropbox-App (öffentlich, kein Secret) aus view.local.json
-const DROPBOX_APP_KEY: Option<&str> = option_env!("PSV_DROPBOX_APP_KEY");
+impl AppState {
+    fn verteiler(&self) -> Arc<speicher::Verteiler> {
+        self.speicher.read().map(|s| s.verteiler.clone()).unwrap_or_else(|e| e.into_inner().verteiler.clone())
+    }
+    fn konto(&self) -> Option<Arc<speicher::Konto>> {
+        self.speicher.read().map(|s| s.konto.clone()).unwrap_or_else(|e| e.into_inner().konto.clone())
+    }
+}
+
+/// Dropbox-Konto mit Token im macOS-Schlüsselbund
+fn konto_anlegen(key: &str) -> Arc<speicher::Konto> {
+    Arc::new(speicher::Konto::neu(key, Box::new(speicher::dropbox::token::Schluesselbund)))
+}
 
 fn config_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path().app_config_dir().map_err(|e| e.to_string())
@@ -50,7 +58,7 @@ fn config_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 /// Antwort: Info zur DB oder Fehlertext (dann zeigt die Oberfläche die DB-Auswahl).
 #[tauri::command]
 async fn start(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<db::DbInfo, String> {
-    let r = ablauf::start(&config_dir(&app)?, option_env!("PSV_STANDARD_DB"))?;
+    let r = ablauf::start(&config_dir(&app)?)?;
     merken(&state, r)
 }
 
@@ -166,7 +174,7 @@ async fn vorschau(
     {
         return Ok(thumbs::Vorschau::Datenbank { schluessel });
     }
-    let verteiler = state.verteiler.clone();
+    let verteiler = state.verteiler();
     tauri::async_runtime::spawn_blocking(move || verteiler.fuer(&pfad).vorschau(&pfad, groesse.clamp(64, 2400)))
     .await
     .map_err(|e| e.to_string())
@@ -183,7 +191,7 @@ async fn details(state: State<'_, AppState>, id: i64) -> Result<details::Details
 /// Große Vorschau (2048 px) auf Wunsch – aus dem Original, nicht im Vorschau-Cache.
 #[tauri::command]
 async fn vorschau_gross(state: State<'_, AppState>, pfad: String) -> Result<thumbs::Vorschau, String> {
-    let verteiler = state.verteiler.clone();
+    let verteiler = state.verteiler();
     let ordner = state.gross.clone();
     tauri::async_runtime::spawn_blocking(move || gross::holen(verteiler.fuer(&pfad), &ordner, &pfad))
         .await
@@ -192,7 +200,7 @@ async fn vorschau_gross(state: State<'_, AppState>, pfad: String) -> Result<thum
 
 /// Original bereitstellen (Dropbox „nur online“ → Download) – im Thread-Pool.
 async fn original(state: &State<'_, AppState>, pfad: String) -> Result<PathBuf, String> {
-    let verteiler = state.verteiler.clone();
+    let verteiler = state.verteiler();
     tauri::async_runtime::spawn_blocking(move || verteiler.fuer(&pfad).original_bereitstellen(&pfad))
         .await
         .map_err(|e| e.to_string())?
@@ -254,35 +262,30 @@ async fn teilen(
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DropboxStatus {
-    /// App-Schlüssel in view.local.json vorhanden
+    /// App-Schlüssel in den Einstellungen (oder mitgelieferter Standard)
     eingerichtet: bool,
     /// Refresh-Token im Schlüsselbund
     angemeldet: bool,
 }
 
-fn dropbox_zustand(state: &AppState) -> DropboxStatus {
-    DropboxStatus {
-        eingerichtet: state.dropbox.is_some(),
-        angemeldet: state.dropbox.as_ref().is_some_and(|k| k.angemeldet()),
-    }
-}
-
 #[tauri::command]
 async fn dropbox_status(state: State<'_, AppState>) -> Result<DropboxStatus, String> {
-    let k = state.dropbox.clone();
+    let k = state.konto();
+    let eingerichtet = k.is_some();
     // Schlüsselbund-Zugriff kann kurz dauern (Freigabe-Dialog) → nicht im Hauptthread
     let angemeldet = tauri::async_runtime::spawn_blocking(move || k.is_some_and(|k| k.angemeldet()))
         .await
         .map_err(|e| e.to_string())?;
-    Ok(DropboxStatus { eingerichtet: state.dropbox.is_some(), angemeldet })
+    Ok(DropboxStatus { eingerichtet, angemeldet })
 }
 
 /// Öffnet die Dropbox-Anmeldung im Browser und wartet (max. 5 min) auf den Rückruf.
 #[tauri::command]
 async fn dropbox_anmelden(state: State<'_, AppState>) -> Result<DropboxStatus, String> {
-    let k = state.dropbox.clone().ok_or("Kein Dropbox-App-Schlüssel in view.local.json.")?;
+    let k = state.konto().ok_or("Kein Dropbox-App-Schlüssel eingetragen (Einstellungen).")?;
+    let k2 = k.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        k.anmelden(
+        k2.anmelden(
             speicher::dropbox::REDIRECT_PORT,
             |url| {
                 let _ = std::process::Command::new("/usr/bin/open").arg(url).status();
@@ -292,15 +295,76 @@ async fn dropbox_anmelden(state: State<'_, AppState>) -> Result<DropboxStatus, S
     })
     .await
     .map_err(|e| e.to_string())??;
-    Ok(dropbox_zustand(&state))
+    Ok(DropboxStatus { eingerichtet: true, angemeldet: k.angemeldet() })
 }
 
 #[tauri::command]
 async fn dropbox_abmelden(state: State<'_, AppState>) -> Result<DropboxStatus, String> {
-    if let Some(k) = state.dropbox.clone() {
+    let k = state.konto();
+    let eingerichtet = k.is_some();
+    if let Some(k) = k {
         tauri::async_runtime::spawn_blocking(move || k.abmelden()).await.map_err(|e| e.to_string())??;
     }
-    Ok(dropbox_zustand(&state))
+    Ok(DropboxStatus { eingerichtet, angemeldet: false })
+}
+
+/// Einstellungen für den Dialog (fehlende Werte durch Standards ersetzt).
+#[tauri::command]
+fn einstellungen(app: tauri::AppHandle) -> Result<settings::Ansicht, String> {
+    Ok(settings::laden(&config_dir(&app)?).ansicht())
+}
+
+/// Einstellungen aus dem Dialog speichern und sofort wirksam machen: Verteiler und Dropbox-Konto neu
+/// aufbauen, Cache auf die neue Grenze bringen. Meldet „speicher-neu“, damit die Oberfläche Vorschauen neu anfordert.
+#[tauri::command]
+async fn einstellungen_setzen(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    aenderung: settings::Aenderung,
+) -> Result<settings::Ansicht, String> {
+    let dir = config_dir(&app)?;
+    let cache = state.cache.clone();
+    let alt = state.speicher.read().map_err(|e| e.to_string())?.clone();
+    // Abmelden der alten Dropbox-App kann das Netz brauchen → Thread-Pool
+    let (e, neu) = tauri::async_runtime::spawn_blocking(move || {
+        let e = settings::aendern(&dir, aenderung)?;
+        let (neu, fehler) = speicher::Speicher::aufbauen(&e, &cache, Some(&alt), konto_anlegen);
+        if let Some(f) = fehler {
+            eprintln!("View: {f} – alle Pfade werden als lokal behandelt");
+        }
+        let (n, frei) = cache::begrenzen(&cache, e.cache_grenze_bytes());
+        if n > 0 {
+            eprintln!("View: Vorschau-Cache begrenzt – {n} Dateien, {} MB freigegeben", frei / 1024 / 1024);
+        }
+        Ok::<_, String>((e, neu))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    *state.speicher.write().map_err(|e| e.to_string())? = neu;
+    let _ = app.emit("speicher-neu", ());
+    Ok(e.ansicht())
+}
+
+/// Vorschläge für erkannte Cloud-Ordner (~/Dropbox, ~/Library/CloudStorage/…, iCloud) – für den Dialog.
+#[tauri::command]
+fn anbieter_vorschlaege(app: tauri::AppHandle) -> Result<Vec<speicher::Regel>, String> {
+    Ok(speicher::zuordnung::vorschlaege(&app.path().home_dir().map_err(|e| e.to_string())?))
+}
+
+/// „Über Bilderwerk View“ als eigenes Fenster (v0.3) – vorhandenes Fenster nach vorn holen.
+fn ueber_zeigen(app: &tauri::AppHandle) -> tauri::Result<()> {
+    if let Some(w) = app.get_webview_window("ueber") {
+        return w.set_focus();
+    }
+    tauri::WebviewWindowBuilder::new(app, "ueber", tauri::WebviewUrl::App("index.html?fenster=ueber".into()))
+        .title("Über Bilderwerk View")
+        .inner_size(420.0, 400.0)
+        .resizable(false)
+        .minimizable(false)
+        .maximizable(false)
+        .center()
+        .build()
+        .map(|_| ())
 }
 
 /// Größe des Vorschau-Caches (für das DB-Menü).
@@ -360,6 +424,17 @@ pub fn run() {
                     }
                 });
             }
+            if ereignis.id().0 == "ueber" {
+                if let Err(e) = ueber_zeigen(app) {
+                    eprintln!("View: Über-Fenster ({e})");
+                }
+            }
+            if ereignis.id().0 == "einstellungen" {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.set_focus();
+                }
+                let _ = app.emit_to("main", "einstellungen-oeffnen", ());
+            }
             if ereignis.id().0 == "cache_leeren" {
                 let app = app.clone();
                 std::thread::spawn(move || {
@@ -375,33 +450,27 @@ pub fn run() {
             gross::leeren(&gross);
 
             // App-Menü: Standard + „Katalog → Datenbank neu laden (⌘R) · Vorschau-Cache leeren“
-            use tauri::menu::{AboutMetadata, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
+            use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
             let neu = MenuItem::with_id(app, "db_neu_laden", "Datenbank neu laden", true, Some("CmdOrCtrl+R"))?;
             let leeren = MenuItem::with_id(app, "cache_leeren", "Vorschau-Cache leeren", true, None::<&str>)?;
             let untermenue = Submenu::with_items(app, "Katalog", true, &[&neu, &leeren])?;
             let menue = Menu::default(app.handle())?;
-            // „Über Bilderwerk View“: Copyright, Webseite, Kontakt (macOS zeigt „credits“ unter dem Copyright)
+            // „Über Bilderwerk View“ (eigenes Fenster) und „Einstellungen…“ (⌘,) im App-Menü (v0.3)
             if let Some(MenuItemKind::Submenu(app_menue)) = menue.items()?.into_iter().next() {
-                let info = PredefinedMenuItem::about(
-                    app,
-                    None,
-                    Some(AboutMetadata {
-                        copyright: Some("© 2026 Kim Sieber".into()),
-                        website: Some("http://bilderwerk.sieber-bw.de".into()),
-                        website_label: Some("bilderwerk.sieber-bw.de".into()),
-                        credits: Some("http://bilderwerk.sieber-bw.de\nBilderwerk@sieber-bw.de".into()),
-                        icon: app.default_window_icon().cloned(),
-                        ..Default::default()
-                    }),
-                )?;
+                let ueber = MenuItem::with_id(app, "ueber", "Über Bilderwerk View", true, None::<&str>)?;
+                let einst = MenuItem::with_id(app, "einstellungen", "Einstellungen…", true, Some("CmdOrCtrl+,"))?;
                 app_menue.remove_at(0)?;
-                app_menue.insert(&info, 0)?;
+                app_menue.insert(&ueber, 0)?;
+                app_menue.insert(&PredefinedMenuItem::separator(app)?, 1)?;
+                app_menue.insert(&einst, 2)?;
             }
             menue.append(&untermenue)?;
             app.handle().set_menu(menue)?;
 
+            let einst = settings::laden(&app.path().app_config_dir()?);
+
             // Cache beim Start auf die Obergrenze bringen (im Hintergrund)
-            let grenze = settings::laden(&app.path().app_config_dir()?).cache_grenze_bytes();
+            let grenze = einst.cache_grenze_bytes();
             let dir = cache.clone();
             std::thread::spawn(move || {
                 let (n, frei) = cache::begrenzen(&dir, grenze);
@@ -410,10 +479,7 @@ pub fn run() {
                 }
             });
 
-            let dropbox = DROPBOX_APP_KEY
-                .filter(|k| !k.trim().is_empty())
-                .map(|k| Arc::new(speicher::Konto::neu(k.trim(), Box::new(speicher::dropbox::token::Schluesselbund))));
-            let (verteiler, fehler) = speicher::Verteiler::aus_konfiguration(ANBIETER, &cache, dropbox.clone());
+            let (speicher, fehler) = speicher::Speicher::aufbauen(&einst, &cache, None, konto_anlegen);
             if let Some(f) = fehler {
                 eprintln!("View: {f} – alle Pfade werden als lokal behandelt");
             }
@@ -423,8 +489,7 @@ pub fn run() {
                 beobachter: Mutex::new(beobachter::Beobachter::default()),
                 cache,
                 gross,
-                verteiler: Arc::new(verteiler),
-                dropbox,
+                speicher: RwLock::new(speicher),
             });
             let h = app.handle().clone();
             std::thread::spawn(move || beobachten(h));
@@ -433,6 +498,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             start,
             db_setzen,
+            einstellungen,
+            einstellungen_setzen,
+            anbieter_vorschlaege,
             db_neu_laden,
             suchen,
             facetten,

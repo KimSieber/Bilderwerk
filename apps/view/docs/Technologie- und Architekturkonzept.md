@@ -183,19 +183,19 @@ flowchart LR
 
 | Datei | Im Repo | Inhalt |
 |---|---|---|
-| `view.local.example.json` | ja | Vorlage |
-| `view.local.json` | **nein** (`.gitignore`) | lokale Pfade, z. B. Vorschlag für die DB |
-| `einstellungen.json` (App-Support) | nein | gewählter DB-Pfad je Rechner |
+| `einstellungen.json` (App-Support) | nein | je Rechner: DB-Pfad, Cache-Grenze, Speicheranbieter-Regeln, Dropbox-App-Schlüssel |
+| Schlüsselbund „de.sieber-bw.bilderwerk.view“ | nein | Dropbox-Refresh-Token |
 
-`build.rs` liest `view.local.json` beim Build und gibt den Wert per `option_env!` an den Code weiter.
-Fehlt die Datei, baut die App trotzdem. Beim ersten Start fragt sie dann nach der Datenbank.
+Seit v0.3 wird nichts Rechnerabhängiges mehr beim Bau eingebaut (`view.local.json`/`build.rs`/`option_env!` entfallen).
+Alles steht im Einstellungsdialog; Änderungen an Regeln oder App-Schlüssel bauen Verteiler und Dropbox-Konto im
+`AppState` neu auf (`RwLock<Speicher>`), ohne Neustart. Wechselt der App-Schlüssel, wird das alte Konto abgemeldet.
+Der mitgelieferte App-Schlüssel ist öffentlich (Anmeldung per PKCE, kein Secret).
 
 ## 8. Projektstruktur
 
 ```
 Bilderwerk View/
 ├── docs/ARCHITEKTUR.md
-├── view.local.example.json      (view.local.json – lokal, ignoriert)
 ├── package.json · vite.config.ts · tsconfig.json · index.html
 ├── src/                        React-Oberfläche
 │   ├── App.tsx  api.ts  types.ts  styles.css

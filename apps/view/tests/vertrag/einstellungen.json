@@ -1,0 +1,16 @@
+{
+  "dbPfad": "/Users/test/Bildkatalog.db",
+  "cacheGrenzeMb": 1024,
+  "anbieter": [
+    {
+      "pfad": "/Users/test/Dropbox",
+      "art": "dropbox-klassisch"
+    },
+    {
+      "pfad": "/",
+      "art": "lokal"
+    }
+  ],
+  "dropboxAppKey": "sm36zb0y3puyff6",
+  "standardAppKey": "sm36zb0y3puyff6"
+}

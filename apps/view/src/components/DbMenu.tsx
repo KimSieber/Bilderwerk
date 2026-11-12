@@ -1,22 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { api, groesseDe, zahlDe } from "../api";
-import type { CacheInfo, DbInfo, DropboxStatus } from "../types";
-import { alleNeuLaden, nurOnlineNeuLaden } from "../vorschau";
+import { api, zahlDe } from "../api";
+import type { DbInfo } from "../types";
 
 interface Props {
   info: DbInfo;
   onWechseln: () => void;
+  /** Einstellungsdialog öffnen (Cache, Speicherorte, Dropbox – seit v0.3 dort) */
+  onEinstellungen: () => void;
 }
 
-/** Kleines Menü oben rechts: Stand der Datenbank-Sicherung, Wechsel der Datei, Dropbox-Anmeldung. */
-export default function DbMenu({ info, onWechseln }: Props) {
+/** Kleines Menü oben rechts: Stand der Datenbank-Sicherung, Neu laden, Wechsel der Datei, Einstellungen. */
+export default function DbMenu({ info, onWechseln, onEinstellungen }: Props) {
   const [offen, setOffen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const [dropbox, setDropbox] = useState<DropboxStatus | null>(null);
-  const [dbxWartet, setDbxWartet] = useState(false);
-  const [dbxFehler, setDbxFehler] = useState<string | null>(null);
-
-  const [cache, setCache] = useState<CacheInfo | null>(null);
   const [laedt, setLaedt] = useState(false);
   const [neuFehler, setNeuFehler] = useState<string | null>(null);
 
@@ -30,55 +26,6 @@ export default function DbMenu({ info, onWechseln }: Props) {
       setNeuFehler(String(e));
     } finally {
       setLaedt(false);
-    }
-  };
-  const [leert, setLeert] = useState(false);
-
-  // Status bei jedem Öffnen frisch abfragen; ohne Tauri/App-Schlüssel bleibt der Bereich weg
-  useEffect(() => {
-    if (!offen) return;
-    api
-      .dropboxStatus()
-      .then(setDropbox)
-      .catch(() => setDropbox(null));
-    api
-      .cacheInfo()
-      .then(setCache)
-      .catch(() => setCache(null));
-  }, [offen]);
-
-  const cacheLeeren = async () => {
-    setLeert(true);
-    try {
-      setCache(await api.cacheLeeren());
-      alleNeuLaden();
-    } catch {
-      /* Anzeige bleibt */
-    } finally {
-      setLeert(false);
-    }
-  };
-
-  const anmelden = async () => {
-    setDbxWartet(true);
-    setDbxFehler(null);
-    try {
-      const s = await api.dropboxAnmelden();
-      setDropbox(s);
-      if (s.angemeldet) nurOnlineNeuLaden();
-    } catch (e) {
-      setDbxFehler(String(e));
-    } finally {
-      setDbxWartet(false);
-    }
-  };
-
-  const abmelden = async () => {
-    setDbxFehler(null);
-    try {
-      setDropbox(await api.dropboxAbmelden());
-    } catch (e) {
-      setDbxFehler(String(e));
     }
   };
 
@@ -140,35 +87,18 @@ export default function DbMenu({ info, onWechseln }: Props) {
               Andere Datenbank…
             </button>
           </div>
-          {cache && (
-            <div className="dbmenu__cache">
-              <div className="dbmenu__zeile">
-                <span className="leise">Vorschau-Cache</span>
-                <span>{groesseDe(cache.bytes)}</span>
-              </div>
-              <button className="knopf" onClick={cacheLeeren} disabled={leert || cache.dateien === 0}>
-                {leert ? "Wird geleert …" : "Cache leeren"}
-              </button>
-            </div>
-          )}
-          {dropbox?.eingerichtet && (
-            <div className="dbmenu__dropbox">
-              <div className="dbmenu__zeile">
-                <span className="leise">Dropbox</span>
-                <span>{dropbox.angemeldet ? "angemeldet" : "nicht angemeldet"}</span>
-              </div>
-              {dbxFehler && <div className="dbmenu__fehler">{dbxFehler}</div>}
-              {dropbox.angemeldet ? (
-                <button className="knopf" onClick={abmelden}>
-                  Von Dropbox abmelden
-                </button>
-              ) : (
-                <button className="knopf" onClick={anmelden} disabled={dbxWartet}>
-                  {dbxWartet ? "Anmeldung im Browser …" : "Bei Dropbox anmelden…"}
-                </button>
-              )}
-            </div>
-          )}
+          <div className="dbmenu__einst">
+            <button
+              className="knopf"
+              onClick={() => {
+                setOffen(false);
+                onEinstellungen();
+              }}
+              title="Einstellungen (⌘,)"
+            >
+              Einstellungen…
+            </button>
+          </div>
         </div>
       )}
     </div>

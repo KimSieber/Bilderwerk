@@ -65,10 +65,42 @@ export interface CacheInfo {
 }
 
 export interface DropboxStatus {
-  /** App-Schlüssel in view.local.json vorhanden */
+  /** App-Schlüssel eingetragen (eigener oder mitgelieferter) */
   eingerichtet: boolean;
   /** Anmeldung im Schlüsselbund */
   angemeldet: boolean;
+}
+
+/** Speicheranbieter je Ordner (v0.3) – es gilt der längste passende Ordner */
+export type AnbieterArt = "lokal" | "file-provider" | "dropbox-klassisch";
+
+export interface Regel {
+  pfad: string;
+  art: AnbieterArt;
+}
+
+export const ANBIETER_ARTEN: { art: AnbieterArt; label: string; hilfe: string }[] = [
+  { art: "lokal", label: "Lokal", hilfe: "Dateien auf diesem Rechner; „nur online“ bleibt unangetastet" },
+  { art: "file-provider", label: "Cloud (File Provider)", hilfe: "iCloud, OneDrive, Google Drive, neue Dropbox – lädt beim Lesen nach" },
+  { art: "dropbox-klassisch", label: "Dropbox (klassisch)", hilfe: "Ordner ~/Dropbox – „nur online“ über die Dropbox-API" },
+];
+
+/** Einstellungen für den Dialog (Befehl `einstellungen`, v0.3) */
+export interface Einstellungen {
+  dbPfad: string | null;
+  cacheGrenzeMb: number;
+  anbieter: Regel[];
+  /** wirksamer App-Schlüssel, "" = keine Dropbox-API */
+  dropboxAppKey: string;
+  /** mitgelieferter Schlüssel */
+  standardAppKey: string;
+}
+
+/** Änderung aus dem Dialog (Befehl `einstellungen_setzen`) */
+export interface EinstellungenAenderung {
+  cacheGrenzeMb: number;
+  anbieter: Regel[];
+  dropboxAppKey: string;
 }
 
 export const LEERER_FILTER: SuchFilter = {
